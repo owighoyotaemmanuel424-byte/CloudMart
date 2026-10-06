@@ -37,6 +37,7 @@ export async function POST(request: Request) {
         update: { role: "ADMIN" },
       });
       const session = await createSession(user.id);
+      await db.auditLog.create({ data: { actorId: user.id, action: "admin.login", resource: "admin_access", metadata: { mode: "bootstrap" } } });
       const response = NextResponse.json({ ok: true, mode: "bootstrap", user: { id: user.id, email: user.email, role: user.role } });
       response.cookies.set(COOKIE, session.value, {
         httpOnly: true,
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
     }
 
     const session = await createSession(user.id);
+    await db.auditLog.create({ data: { actorId: user.id, action: "admin.login", resource: "admin_access", metadata: { mode: "login" } } });
     const response = NextResponse.json({ ok: true, mode: "login", user: { id: user.id, email: user.email, role: user.role } });
     response.cookies.set(COOKIE, session.value, {
       httpOnly: true,
