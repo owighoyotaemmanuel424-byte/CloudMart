@@ -5,6 +5,7 @@ import { getProvider } from "@/lib/providers";
 export async function syncProviderCatalog(providerName = "globalgle") {
   const provider = getProvider(providerName);
   const catalog = await provider.catalog();
+  if (catalog.length === 0) throw new Error("provider_catalog_empty");
 
   let products = 0;
 
