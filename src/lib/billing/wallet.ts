@@ -15,23 +15,40 @@ export async function creditWallet(input: WalletMutation) {
   return db.$transaction(async (tx) => {
     const wallet = await tx.wallet.upsert({
       where: { userId: input.userId },
-      create: { userId: input.userId, balanceMinor: input.amountMinor },
-      update: { balanceMinor: { increment: input.amountMinor } },
+      create: { userId: input.userId, balanceMinor: 0n },
+      update: {},
     });
 
-    const ledger = await tx.ledgerEntry.create({
-      data: {
-        userId: input.userId,
-        walletId: wallet.id,
-        type: LedgerType.CREDIT,
-        amountMinor: input.amountMinor,
-        reference: input.reference,
-        description: input.description,
-        metadata: input.metadata,
-      },
-    });
+    let ledger;
+    let created = false;
 
-    return { wallet, ledger };
+    try {
+      ledger = await tx.ledgerEntry.create({
+        data: {
+          userId: input.userId,
+          walletId: wallet.id,
+          type: LedgerType.CREDIT,
+          amountMinor: input.amountMinor,
+          reference: input.reference,
+          description: input.description,
+          metadata: input.metadata,
+        },
+      });
+      created = true;
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+      ledger = await tx.ledgerEntry.findUnique({ where: { reference: input.reference } });
+      if (!ledger) throw error;
+    }
+
+    const updated = created
+      ? await tx.wallet.update({
+          where: { id: wallet.id },
+          data: { balanceMinor: { increment: input.amountMinor } },
+        })
+      : wallet;
+
+    return { wallet: updated, ledger };
   });
 }
 
