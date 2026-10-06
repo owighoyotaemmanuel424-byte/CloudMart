@@ -48,5 +48,5 @@ export function resolveProductPricing(metadata: unknown) {
 }
 
 export function markupForProviderCurrency(currency: string) {
-  return currency === "USD" ? pricingConfig.markupPercent : 0;
+  return currency.toUpperCase() === "USD" || currency.toUpperCase() === "NGN" ? pricingConfig.markupPercent : 0;
 }
