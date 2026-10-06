@@ -33,3 +33,39 @@ export async function getSessionUser(value?: string | null) {
 }
 
 export { COOKIE, TTL_SECONDS };
+
+
+const SCRYPT_COST = 16384;
+const SCRYPT_BLOCK_SIZE = 8;
+const SCRYPT_PARALLELIZATION = 1;
+const SCRYPT_KEY_LENGTH = 64;
+
+export function hashPassword(password: string) {
+  const salt = crypto.randomBytes(16);
+  const hash = crypto.scryptSync(password, salt, SCRYPT_KEY_LENGTH, {
+    N: SCRYPT_COST,
+    r: SCRYPT_BLOCK_SIZE,
+    p: SCRYPT_PARALLELIZATION,
+    maxmem: 32 * 1024 * 1024,
+  });
+  return `scrypt$${SCRYPT_COST}$${SCRYPT_BLOCK_SIZE}$${SCRYPT_PARALLELIZATION}$${salt.toString("base64url")}$${hash.toString("base64url")}`;
+}
+
+export function verifyPassword(password: string, encoded: string | null | undefined) {
+  if (!encoded) return false;
+  const [algorithm, nRaw, rRaw, pRaw, saltRaw, hashRaw] = encoded.split("$");
+  if (algorithm !== "scrypt" || !nRaw || !rRaw || !pRaw || !saltRaw || !hashRaw) return false;
+
+  const salt = Buffer.from(saltRaw, "base64url");
+  const expected = Buffer.from(hashRaw, "base64url");
+  if (!salt.length || !expected.length) return false;
+
+  const actual = crypto.scryptSync(password, salt, expected.length, {
+    N: Number(nRaw),
+    r: Number(rRaw),
+    p: Number(pRaw),
+    maxmem: 32 * 1024 * 1024,
+  });
+
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
