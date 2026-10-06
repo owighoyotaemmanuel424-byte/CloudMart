@@ -68,17 +68,22 @@ export class GlobalgleClient implements ProviderAdapter {
 }
 
 function normalizeCatalog(input: unknown): ProviderCatalogItem[] {
-  const items = Array.isArray(input) ? input : (
-    typeof input === "object" && input !== null && Array.isArray((input as { services?: unknown }).services)
-      ? (input as { services: unknown[] }).services : []
-  );
+  let items: unknown = input;
+  for (let depth = 0; depth < 3; depth++) {
+    if (Array.isArray(items)) break;
+    if (!items || typeof items !== "object") { items = []; break; }
+    const object = items as Record<string, unknown>;
+    const next = object.services ?? object.products ?? object.catalog ?? object.results ?? object.data;
+    if (next === undefined) { items = []; break; }
+    items = next;
+  }
 
-  return items
+  return (Array.isArray(items) ? items : [])
     .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
     .map((item) => ({
-      slug: String(item.slug ?? item.id ?? ""),
-      name: String(item.name ?? item.title ?? item.slug ?? item.id ?? "Unnamed service"),
-      category: typeof item.category === "string" ? item.category : undefined,
+      slug: String(item.slug ?? item.code ?? item.id ?? ""),
+      name: String(item.name ?? item.title ?? item.productName ?? item.slug ?? item.id ?? "Unnamed service"),
+      category: typeof item.category === "string" ? item.category : typeof item.type === "string" ? item.type : undefined,
       basePath: typeof item.basePath === "string" ? item.basePath : undefined,
       scopes: Array.isArray(item.scopes) ? item.scopes.map(String) : undefined,
       actions: Array.isArray(item.actions) ? item.actions.map(String) : undefined,
