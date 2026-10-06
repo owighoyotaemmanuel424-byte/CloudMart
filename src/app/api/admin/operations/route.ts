@@ -35,6 +35,56 @@ export async function GET(req:Request){
  if(s==="orders"){const where:any={...(status?{status}:{}),...(search?{OR:[{id:{contains:search,mode:"insensitive"}},{providerOrderId:{contains:search,mode:"insensitive"}},{user:{email:{contains:search,mode:"insensitive"}}},{service:{name:{contains:search,mode:"insensitive"}}}]}:{})};const [rows,total,summary]=await Promise.all([db.order.findMany({where,orderBy:{createdAt:"desc"},skip,take,include:{user:{select:{id:true,email:true,name:true}},service:{select:{slug:true,name:true,category:true}},events:{orderBy:{createdAt:"desc"},take:5,select:{id:true,type:true,createdAt:true}}}}),db.order.count({where}),db.order.groupBy({by:["status"],_count:{_all:true},_sum:{amountMinor:true}})]);return NextResponse.json(json({ok:true,section:s,page,take,total,rows,summary}))}
  if(s==="ledger"){const where:any=search?{OR:[{reference:{contains:search,mode:"insensitive"}},{user:{email:{contains:search,mode:"insensitive"}}},{description:{contains:search,mode:"insensitive"}}]}:{};const [rows,total]=await Promise.all([db.ledgerEntry.findMany({where,orderBy:{createdAt:"desc"},skip,take,include:{user:{select:{email:true,name:true}}}}),db.ledgerEntry.count({where})]);return NextResponse.json(json({ok:true,section:s,page,take,total,rows}))}
  if(s==="users"){const where:any=search?{OR:[{email:{contains:search,mode:"insensitive"}},{name:{contains:search,mode:"insensitive"}}]}:{};const [rows,total]=await Promise.all([db.user.findMany({where,orderBy:{createdAt:"desc"},skip,take,include:{wallet:{select:{balanceMinor:true,currency:true,updatedAt:true}},_count:{select:{orders:true,deposits:true}}}}),db.user.count({where})]);return NextResponse.json(json({ok:true,section:s,page,take,total,rows}))}
+ if(s==="services"){
+  const where:any=search?{OR:[{name:{contains:search,mode:"insensitive"}},{slug:{contains:search,mode:"insensitive"}},{category:{contains:search,mode:"insensitive"}}]}:{};
+  const [rows,total]=await Promise.all([
+    db.service.findMany({where,orderBy:{updatedAt:"desc"},skip,take,include:{_count:{select:{products:true,orders:true}}}}),
+    db.service.count({where})
+  ]);
+  return NextResponse.json(json({ok:true,section:s,page,take,total,rows}));
+ }
+ if(s==="float"){
+  const [sum,count,negative]=await Promise.all([
+    db.wallet.aggregate({_sum:{balanceMinor:true}}),
+    db.wallet.count(),
+    db.wallet.count({where:{balanceMinor:{lt:0}}})
+  ]);
+  return NextResponse.json(json({ok:true,section:s,totalBalanceMinor:sum._sum.balanceMinor||0, wallets:count, negativeWallets:negative, page:1,take:1,total:1,rows:[]}));
+ }
+ if(s==="revenue"){
+  const [completed,credits,debits,refunds]=await Promise.all([
+    db.order.aggregate({where:{status:"COMPLETED"},_sum:{amountMinor:true},_count:{_all:true}}),
+    db.ledgerEntry.aggregate({where:{type:"CREDIT"},_sum:{amountMinor:true}}),
+    db.ledgerEntry.aggregate({where:{type:"DEBIT"},_sum:{amountMinor:true}}),
+    db.ledgerEntry.aggregate({where:{type:"REFUND"},_sum:{amountMinor:true}})
+  ]);
+  return NextResponse.json(json({ok:true,section:s,completedAmountMinor:completed._sum.amountMinor||0,completedOrders:completed._count._all,creditMinor:credits._sum.amountMinor||0,debitMinor:debits._sum.amountMinor||0,refundMinor:refunds._sum.amountMinor||0,page:1,take:1,total:1,rows:[]}));
+ }
+ if(s==="webhooks"){
+  const where:any=search?{OR:[{provider:{contains:search,mode:"insensitive"}},{eventType:{contains:search,mode:"insensitive"}},{externalId:{contains:search,mode:"insensitive"}}]}:{};
+  const [rows,total]=await Promise.all([
+    db.webhookEvent.findMany({where,orderBy:{createdAt:"desc"},skip,take}),
+    db.webhookEvent.count({where})
+  ]);
+  return NextResponse.json(json({ok:true,section:s,page,take,total,rows}));
+ }
+ if(s==="audit"||s==="login-history"){
+  const where:any=s==="login-history"?{action:"admin.login"}:(search?{OR:[{action:{contains:search,mode:"insensitive"}},{resource:{contains:search,mode:"insensitive"}},{actorId:{contains:search,mode:"insensitive"}}]}:{});
+  const [rows,total]=await Promise.all([
+    db.auditLog.findMany({where,orderBy:{createdAt:"desc"},skip,take}),
+    db.auditLog.count({where})
+  ]);
+  return NextResponse.json(json({ok:true,section:s,page,take,total,rows}));
+ }
+ if(s==="health"){
+  let database={ok:false,message:"database unavailable"};
+  try{await db.$queryRaw`SELECT 1`;database={ok:true,message:"PostgreSQL reachable"}}catch{}
+  let globalgle={ok:false,status:0,message:"not_configured"};
+  if(process.env.GLOBALGLE_API_KEY){
+    try{const {getProvider}=await import("@/lib/providers");globalgle=await getProvider("globalgle").health()}catch(error){globalgle={ok:false,status:500,message:error instanceof Error?error.message:"provider error"}}
+  }
+  return NextResponse.json({ok:true,section:s,timestamp:new Date().toISOString(),database,globalgle,page:1,take:1,total:1,rows:[]});
+ }
  const [users,deposits,orders,ledger,recentDeposits,recentOrders]=await Promise.all([db.user.count(),db.walletDeposit.count(),db.order.count(),db.ledgerEntry.count(),db.walletDeposit.findMany({orderBy:{createdAt:"desc"},take:8,include:{user:{select:{email:true}}}}),db.order.findMany({orderBy:{createdAt:"desc"},take:8,include:{user:{select:{email:true}},service:{select:{name:true}}}})]);
  return NextResponse.json(json({ok:true,section:s,metrics:{users,deposits,orders,ledger},recentDeposits,recentOrders}));
 }
