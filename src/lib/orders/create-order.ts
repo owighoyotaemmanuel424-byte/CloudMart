@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { OrderStatus } from "@prisma/client";
+import { Prisma, OrderStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { debitWallet, refundWallet } from "@/lib/billing/wallet";
 import { getProvider } from "@/lib/providers";
@@ -39,7 +39,7 @@ export async function createOrder(input: CreateOrderInput) {
       amountMinor: input.amountMinor,
       markupPercent: 0,
       idempotencyKey,
-      requestSnapshot: input.request,
+      requestSnapshot: input.request as Prisma.InputJsonValue,
     },
   });
 
@@ -49,7 +49,7 @@ export async function createOrder(input: CreateOrderInput) {
       amountMinor: input.amountMinor,
       reference: `order:${order.id}:debit`,
       description: `CloudMart order ${order.id}`,
-      metadata: { orderId: order.id, service: input.serviceSlug },
+      metadata: { orderId: order.id, service: input.serviceSlug } as Prisma.InputJsonValue,
     });
 
     await db.order.update({
@@ -81,7 +81,7 @@ export async function createOrder(input: CreateOrderInput) {
       data: {
         providerOrderId,
         status: OrderStatus.PROCESSING,
-        responseSnapshot: body as object,
+        responseSnapshot: body as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -89,7 +89,7 @@ export async function createOrder(input: CreateOrderInput) {
       data: {
         orderId: order.id,
         type: "provider_accepted",
-        payload: body as object,
+        payload: body as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -100,7 +100,7 @@ export async function createOrder(input: CreateOrderInput) {
       amountMinor: input.amountMinor,
       reference: `order:${order.id}:refund`,
       description: `Refund for failed CloudMart order ${order.id}`,
-      metadata: { orderId: order.id },
+      metadata: { orderId: order.id } as Prisma.InputJsonValue,
     });
 
     await db.order.update({
