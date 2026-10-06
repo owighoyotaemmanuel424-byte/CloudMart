@@ -26,10 +26,12 @@ function normalizeStatus(payload: Record<string, unknown>) {
   const raw = extractString(payload, ["status", "orderStatus", "state", "event"]);
   if (!raw) return undefined;
   const value = raw.toLowerCase().replace(/[-\s]+/g, "_");
-  if (["completed", "complete", "success", "successful", "succeeded", "delivered"].includes(value)) return OrderStatus.COMPLETED;
-  if (["failed", "failure", "error", "rejected", "declined"].includes(value)) return OrderStatus.FAILED;
-  if (["cancelled", "canceled"].includes(value)) return OrderStatus.CANCELLED;
-  if (["processing", "pending", "in_progress", "queued"].includes(value)) return OrderStatus.PROCESSING;
+  const candidates = [value, value.split(".").pop() ?? value, value.split(":").pop() ?? value];
+  const has = (values: string[]) => candidates.some((candidate) => values.includes(candidate));
+  if (has(["completed", "complete", "success", "successful", "succeeded", "delivered"])) return OrderStatus.COMPLETED;
+  if (has(["failed", "failure", "error", "rejected", "declined"])) return OrderStatus.FAILED;
+  if (has(["cancelled", "canceled"])) return OrderStatus.CANCELLED;
+  if (has(["processing", "pending", "in_progress", "queued"])) return OrderStatus.PROCESSING;
   return undefined;
 }
 
@@ -96,7 +98,7 @@ export async function POST(request: Request) {
       });
     }
 
-    await tx.orderEvent.create({
+    if ([OrderStatus.COMPLETED, OrderStatus.REFUNDED, OrderStatus.CANCELLED].includes(current.status)) {\n      await tx.webhookEvent.update({ where: { id: event.id }, data: { processedAt: new Date() } });\n      return;\n    }\n\n    await tx.orderEvent.create({
       data: {
         orderId: current.id,
         type: `provider_webhook_${status.toLowerCase()}`,
