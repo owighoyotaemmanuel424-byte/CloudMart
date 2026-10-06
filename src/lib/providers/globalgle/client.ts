@@ -163,8 +163,10 @@ function normalizeCatalog(input: unknown): ProviderCatalogItem[] {
       basePath: firstStringDeep(item, [
         "basePath", "base_path", "endpoint", "path", "url", "route", "apiPath", "api_path",
       ]),
+      purchasePath: selectPurchaseAction(item.actions)?.path,
+      purchaseMethod: selectPurchaseAction(item.actions)?.method,
       scopes: stringArray(item.scopes),
-      actions: stringArray(item.actions),
+      actions: actionPaths(item.actions),
       methods: stringArray(item.methods),
       requiredFields: stringArrayDeep(item, [
         "requiredFields", "required_fields", "required", "fields", "inputs", "parameters", "formFields", "form_fields",
@@ -257,6 +259,52 @@ function stringArrayDeep(item: Record<string, unknown>, keys: string[]): string[
     }
   }
   return undefined;
+}
+
+type CatalogAction = {
+  method?: string;
+  path?: string;
+  summary?: string;
+  required?: unknown;
+};
+
+function actionRecords(value: unknown): CatalogAction[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(entry => toRecord(entry))
+    .filter((entry): entry is CatalogAction => Boolean(entry));
+}
+
+function actionPaths(value: unknown): string[] | undefined {
+  const paths = actionRecords(value)
+    .map(action => typeof action.path === "string" ? action.path.trim() : "")
+    .filter(Boolean);
+  return paths.length ? Array.from(new Set(paths)) : undefined;
+}
+
+function selectPurchaseAction(value: unknown): { path: string; method: "POST" | "PUT" | "PATCH" } | undefined {
+  const actions = actionRecords(value);
+  const candidates = actions
+    .map(action => {
+      const method = typeof action.method === "string" ? action.method.toUpperCase() : "";
+      const path = typeof action.path === "string" ? action.path.trim() : "";
+      const summary = typeof action.summary === "string" ? action.summary.toLowerCase() : "";
+      if (!path || !["POST", "PUT", "PATCH"].includes(method)) return null;
+
+      const normalizedPath = path.toLowerCase();
+      let score = method === "POST" ? 10 : 6;
+      if (Array.isArray(action.required) && action.required.length) score += 5;
+      if (/create|register|send|rent|generate|add|buy|renew|resize|edit|update|verify|order|provision/.test(summary)) score += 8;
+      if (/\/quote|\/search|\/pricing|\/config|\/providers|\/countries|\/languages|\/voices\b|blocked-countries/.test(normalizedPath)) score -= 20;
+      if (/\/{id}|\/{domain}/.test(path)) score += 3;
+
+      return { path, method: method as "POST" | "PUT" | "PATCH", score };
+    })
+    .filter((entry): entry is { path: string; method: "POST" | "PUT" | "PATCH"; score: number } => Boolean(entry))
+    .sort((a, b) => b.score - a.score);
+
+  const winner = candidates[0];
+  return winner ? { path: winner.path, method: winner.method } : undefined;
 }
 
 function findCatalogItems(input: unknown): unknown[] {
