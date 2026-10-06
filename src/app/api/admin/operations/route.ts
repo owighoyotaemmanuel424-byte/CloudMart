@@ -9,12 +9,21 @@ export async function GET(req:Request){
  const q=new URL(req.url).searchParams,s=q.get("section")||"overview",page=Math.max(1,Number(q.get("page")||1)),take=Math.min(100,Math.max(1,Number(q.get("take")||30))),skip=(page-1)*take,search=q.get("search")?.trim(),status=q.get("status")||undefined;
  if(s==="deposits"){const where:any={...(status?{status}:{}),...(search?{OR:[{reference:{contains:search,mode:"insensitive"}},{providerReference:{contains:search,mode:"insensitive"}},{user:{email:{contains:search,mode:"insensitive"}}}]}:{})};const [rows,total,summary]=await Promise.all([db.walletDeposit.findMany({where,orderBy:{createdAt:"desc"},skip,take,include:{user:{select:{id:true,email:true,name:true}}}}),db.walletDeposit.count({where}),db.walletDeposit.groupBy({by:["status"],_count:{_all:true},_sum:{amountMinor:true}})]);return NextResponse.json(json({ok:true,section:s,page,take,total,rows,summary}))}
  if(s==="reconciliation"){
-  const where:any={status:"PROCESSING",events:{some:{type:"provider_outcome_ambiguous"}}};
+  const staleMinutes = 15;
+  const staleBefore = new Date(Date.now() - staleMinutes * 60 * 1000);
+  const where:any={
+    status:"PROCESSING",
+    OR:[
+      { createdAt:{lte:staleBefore} },
+      { events:{some:{type:"provider_outcome_ambiguous"}} }
+    ]
+  };
   const [rows,total]=await Promise.all([
     db.order.findMany({where,orderBy:{createdAt:"asc"},skip,take,include:{user:{select:{id:true,email:true,name:true}},service:{select:{slug:true,name:true,category:true}},events:{where:{type:"provider_outcome_ambiguous"},orderBy:{createdAt:"desc"},take:3,select:{id:true,type:true,createdAt:true,payload:true}}}}),
     db.order.count({where})
   ]);
-  return NextResponse.json(json({ok:true,section:s,page,take,total,rows}));
+  const enriched=rows.map((row:any)=>({...row,ageMinutes:Math.max(0,Math.floor((Date.now()-new Date(row.createdAt).getTime())/60000)),stale:row.createdAt<=staleBefore}));
+  return NextResponse.json(json({ok:true,section:s,page,take,total,staleMinutes,rows:enriched}));
  }
  if(s==="orders"){const where:any={...(status?{status}:{}),...(search?{OR:[{id:{contains:search,mode:"insensitive"}},{providerOrderId:{contains:search,mode:"insensitive"}},{user:{email:{contains:search,mode:"insensitive"}}},{service:{name:{contains:search,mode:"insensitive"}}}]}:{})};const [rows,total,summary]=await Promise.all([db.order.findMany({where,orderBy:{createdAt:"desc"},skip,take,include:{user:{select:{id:true,email:true,name:true}},service:{select:{slug:true,name:true,category:true}},events:{orderBy:{createdAt:"desc"},take:5,select:{id:true,type:true,createdAt:true}}}}),db.order.count({where}),db.order.groupBy({by:["status"],_count:{_all:true},_sum:{amountMinor:true}})]);return NextResponse.json(json({ok:true,section:s,page,take,total,rows,summary}))}
  if(s==="ledger"){const where:any=search?{OR:[{reference:{contains:search,mode:"insensitive"}},{user:{email:{contains:search,mode:"insensitive"}}},{description:{contains:search,mode:"insensitive"}}]}:{};const [rows,total]=await Promise.all([db.ledgerEntry.findMany({where,orderBy:{createdAt:"desc"},skip,take,include:{user:{select:{email:true,name:true}}}}),db.ledgerEntry.count({where})]);return NextResponse.json(json({ok:true,section:s,page,take,total,rows}))}
