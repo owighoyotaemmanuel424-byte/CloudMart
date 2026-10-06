@@ -91,16 +91,16 @@ export async function POST(request: Request) {
     if (!current) return;
 
     const terminal = [OrderStatus.COMPLETED, OrderStatus.REFUNDED, OrderStatus.CANCELLED].includes(current.status);
-    if (!terminal && status !== OrderStatus.FAILED) {
+    if (terminal) {
+      await tx.webhookEvent.update({ where: { id: event.id }, data: { processedAt: new Date() } });
+      return;
+    }
+
+    if (status !== OrderStatus.FAILED) {
       await tx.order.update({
         where: { id: current.id },
         data: { status, responseSnapshot: body as Prisma.InputJsonValue },
       });
-    }
-
-    if ([OrderStatus.COMPLETED, OrderStatus.REFUNDED, OrderStatus.CANCELLED].includes(current.status)) {
-      await tx.webhookEvent.update({ where: { id: event.id }, data: { processedAt: new Date() } });
-      return;
     }
 
     await tx.orderEvent.create({
