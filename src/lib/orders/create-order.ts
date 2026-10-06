@@ -12,6 +12,56 @@ export type CreateOrderInput = {
   idempotencyKey?: string;
 };
 
+function normalizeProviderPath(path: string) {
+  const trimmed = path.trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const url = new URL(trimmed);
+      return normalizeProviderPath(url.pathname);
+    } catch {
+      return trimmed.replace(/^\//, "");
+    }
+  }
+  return trimmed
+    .replace(/^\/+/, "")
+    .replace(/^api\/v1\//i, "")
+    .replace(/^v1\//i, "");
+}
+
+function fillProviderPath(path: string, request: Record<string, unknown>) {
+  const filled = path.replace(/\{([^}]+)\}/g, (_match, key: string) => {
+    const value = request[key];
+    if (value === undefined || value === null || String(value).trim() === "") {
+      throw new Error("provider_path_parameter_missing:" + key);
+    }
+    return encodeURIComponent(String(value));
+  });
+  return filled;
+}
+
+function findPurchaseAction(metadata: Record<string, unknown>) {
+  const actions = Array.isArray(metadata.actions) ? metadata.actions : [];
+  const candidates = actions
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    .map(action => {
+      const method = typeof action.method === "string" ? action.method.toUpperCase() : "";
+      const path = typeof action.path === "string" ? action.path.trim() : "";
+      const summary = typeof action.summary === "string" ? action.summary.toLowerCase() : "";
+      if (!path || !["POST", "PUT", "PATCH"].includes(method)) return null;
+
+      let score = method === "POST" ? 10 : 6;
+      if (Array.isArray(action.required) && action.required.length) score += 5;
+      if (/create|register|send|rent|generate|add|buy|renew|resize|edit|update|verify|order|provision/.test(summary)) score += 8;
+      if (/\/quote|\/search|\/pricing|\/config|\/providers|\/countries|\/languages|\/voices\b|blocked-countries/.test(path.toLowerCase())) score -= 20;
+
+      return { path: normalizeProviderPath(path), method: method as "POST" | "PUT" | "PATCH", score };
+    })
+    .filter((entry): entry is { path: string; method: "POST" | "PUT" | "PATCH"; score: number } => Boolean(entry))
+    .sort((a, b) => b.score - a.score);
+
+  return candidates[0];
+}
+
 export async function createOrder(input: CreateOrderInput) {
   const requestedKey = input.idempotencyKey?.trim();
   if (requestedKey && requestedKey.length > 120) throw new Error("Invalid idempotency key");
@@ -36,7 +86,11 @@ export async function createOrder(input: CreateOrderInput) {
     const live = (await provider.catalog()).find(item => item.slug === input.serviceSlug);
     if (!live) throw new Error("Service is unavailable");
 
-    const metadata = (live.metadata ?? {}) as Prisma.InputJsonValue;
+    const metadata = {
+      ...((live.metadata ?? {}) as Record<string, unknown>),
+      purchasePath: live.purchasePath,
+      purchaseMethod: live.purchaseMethod,
+    } as Prisma.InputJsonValue;
     const service = await db.service.upsert({
       where: { slug: live.slug },
       create: {
@@ -96,13 +150,21 @@ export async function createOrder(input: CreateOrderInput) {
   const metadata = (product.metadata && typeof product.metadata === "object"
     ? product.metadata
     : {}) as Record<string, unknown>;
-  const providerPath = typeof metadata.basePath === "string" && metadata.basePath.startsWith("/")
-    ? metadata.basePath
-    : typeof metadata.path === "string" && metadata.path.startsWith("/")
-      ? metadata.path
-      : undefined;
+
+  const purchase = findPurchaseAction(metadata);
+  const providerPath =
+    typeof metadata.purchasePath === "string" && metadata.purchasePath.trim()
+      ? normalizeProviderPath(metadata.purchasePath)
+      : purchase?.path;
+
+  const providerMethod =
+    typeof metadata.purchaseMethod === "string" &&
+    ["POST", "PUT", "PATCH"].includes(metadata.purchaseMethod.toUpperCase())
+      ? metadata.purchaseMethod.toUpperCase() as "POST" | "PUT" | "PATCH"
+      : purchase?.method;
 
   if (!providerPath) throw new Error("provider_path_unavailable");
+  if (!providerMethod) throw new Error("provider_method_unavailable");
 
   const markupPercent = markupForProviderCurrency(pricing.providerCurrency);
 
@@ -163,8 +225,8 @@ export async function createOrder(input: CreateOrderInput) {
     });
 
     const response = await provider.request({
-      method: "POST",
-      path: providerPath,
+      method: providerMethod,
+      path: fillProviderPath(providerPath, input.request),
       body: input.request,
       idempotencyKey,
     });
