@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { cookies } from "next/headers";
 import { COOKIE, getSessionUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
@@ -36,21 +37,34 @@ export async function GET(request: Request) {
 
       const wallet = await txdb.wallet.upsert({
         where: { userId: current.userId },
-        update: { balanceMinor: { increment: current.amountMinor }, currency: current.currency },
-        create: { userId: current.userId, balanceMinor: current.amountMinor, currency: current.currency },
+        update: {},
+        create: { userId: current.userId, balanceMinor: 0n, currency: current.currency },
       });
 
-      await txdb.ledgerEntry.create({
-        data: {
-          walletId: wallet.id,
-          userId: current.userId,
-          type: "CREDIT",
-          amountMinor: current.amountMinor,
-          currency: current.currency,
-          reference: `PAYSTACK_${current.reference}`,
-          description: "Wallet funding via Paystack",
-        },
-      });
+      let createdLedger = false;
+      try {
+        await txdb.ledgerEntry.create({
+          data: {
+            walletId: wallet.id,
+            userId: current.userId,
+            type: "CREDIT",
+            amountMinor: current.amountMinor,
+            currency: current.currency,
+            reference: `PAYSTACK_${current.reference}`,
+            description: "Wallet funding via Paystack",
+          },
+        });
+        createdLedger = true;
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+      }
+
+      if (createdLedger) {
+        await txdb.wallet.update({
+          where: { id: wallet.id },
+          data: { balanceMinor: { increment: current.amountMinor } },
+        });
+      }
 
       await txdb.walletDeposit.update({
         where: { id: current.id },
