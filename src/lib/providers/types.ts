@@ -17,6 +17,9 @@ export interface ProviderCatalogItem {
   slug: string;
   name: string;
   category?: string;
+  description?: string;
+  imageUrl?: string;
+  providerId?: string;
   basePath?: string;
   scopes?: string[];
   actions?: string[];
