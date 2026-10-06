@@ -16,7 +16,7 @@ export function resolveProductPricing(metadata: unknown) {
   for (const source of candidates) {
     const ngn = numeric(source.priceNgn) ?? numeric(source.amountNgn);
     if (ngn !== undefined) {
-      return { providerAmount: String(ngn), providerCurrency: "NGN", sellMinor: nairaToMinor(ngn) };
+      return { providerAmount: String(ngn), providerCurrency: "NGN", sellMinor: nairaToMinor(ngn * (1 + pricingConfig.markupPercent / 100)) };
     }
 
     const usd = numeric(source.priceUsd) ?? numeric(source.amountUsd) ?? numeric(source.usdPrice);
@@ -32,7 +32,7 @@ export function resolveProductPricing(metadata: unknown) {
     if (generic !== undefined) {
       const currency = String(source.currency ?? source.priceCurrency ?? "USD").toUpperCase();
       if (currency === "NGN") {
-        return { providerAmount: String(generic), providerCurrency: "NGN", sellMinor: nairaToMinor(generic) };
+        return { providerAmount: String(generic), providerCurrency: "NGN", sellMinor: nairaToMinor(generic * (1 + pricingConfig.markupPercent / 100)) };
       }
       if (currency === "USD") {
         return {
