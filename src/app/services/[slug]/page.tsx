@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { useParams, useRouter } from "next/navigation";
 
 type Service = {
@@ -64,7 +65,7 @@ export default function ServicePage() {
         );
         return;
       }
-      router.push("/orders/" + body.orderId);
+      router.push(("/orders/" + body.orderId) as Route);
     } catch {
       setMessage("Checkout could not be completed. Please try again.");
     } finally {
