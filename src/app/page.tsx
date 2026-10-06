@@ -26,7 +26,7 @@ export default function Home() {
           <a href="#how-it-works">How it works</a>
         </div>
         <div className="nav-actions">
-          <Link href="/dashboard" className="nav-login">Sign in</Link>
+          <Link href="/login" className="nav-login">Sign in</Link>
           <Link href="/dashboard" className="nav-cta">Get started <span>→</span></Link>
         </div>
       </nav>
