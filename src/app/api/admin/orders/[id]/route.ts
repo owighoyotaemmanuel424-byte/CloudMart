@@ -20,7 +20,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   if (!order) return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
 
   const webhookEvents = await db.webhookEvent.findMany({
-    where: { provider: order.provider, payload: { path: ["orderId"], equals: order.providerOrderId ?? "" } },
+    where: { provider: order.provider, OR: [
+      { payload: { path: ["orderId"], equals: order.providerOrderId ?? "" } },
+      { payload: { path: ["data", "orderId"], equals: order.providerOrderId ?? "" } },
+      { payload: { path: ["order", "orderId"], equals: order.providerOrderId ?? "" } },
+      { payload: { path: ["result", "orderId"], equals: order.providerOrderId ?? "" } },
+    ] },
     orderBy: { createdAt: "asc" },
   }).catch(() => []);
 
