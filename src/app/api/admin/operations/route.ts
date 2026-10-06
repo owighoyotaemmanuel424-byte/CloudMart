@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { COOKIE,getSessionUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+
+const DEFAULT_RECONCILIATION_MINUTES = 15;
+async function getReconciliationMinutes() {
+ const setting = await db.appSetting.findUnique({ where: { key: "order_reconciliation_stale_minutes" } });
+ const value = setting ? Number(setting.value) : DEFAULT_RECONCILIATION_MINUTES;
+ return Number.isInteger(value) && value >= 5 && value <= 1440 ? value : DEFAULT_RECONCILIATION_MINUTES;
+}
 const json=(x:any)=>JSON.parse(JSON.stringify(x,(_,v)=>typeof v==="bigint"?v.toString():v));
 export async function GET(req:Request){
  const jar=await cookies(),u=await getSessionUser(jar.get(COOKIE)?.value);
@@ -9,7 +16,7 @@ export async function GET(req:Request){
  const q=new URL(req.url).searchParams,s=q.get("section")||"overview",page=Math.max(1,Number(q.get("page")||1)),take=Math.min(100,Math.max(1,Number(q.get("take")||30))),skip=(page-1)*take,search=q.get("search")?.trim(),status=q.get("status")||undefined;
  if(s==="deposits"){const where:any={...(status?{status}:{}),...(search?{OR:[{reference:{contains:search,mode:"insensitive"}},{providerReference:{contains:search,mode:"insensitive"}},{user:{email:{contains:search,mode:"insensitive"}}}]}:{})};const [rows,total,summary]=await Promise.all([db.walletDeposit.findMany({where,orderBy:{createdAt:"desc"},skip,take,include:{user:{select:{id:true,email:true,name:true}}}}),db.walletDeposit.count({where}),db.walletDeposit.groupBy({by:["status"],_count:{_all:true},_sum:{amountMinor:true}})]);return NextResponse.json(json({ok:true,section:s,page,take,total,rows,summary}))}
  if(s==="reconciliation"){
-  const staleMinutes = 15;
+  const staleMinutes = await getReconciliationMinutes();
   const staleBefore = new Date(Date.now() - staleMinutes * 60 * 1000);
   const where:any={
     status:"PROCESSING",
