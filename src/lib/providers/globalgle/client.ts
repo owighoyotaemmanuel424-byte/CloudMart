@@ -13,7 +13,10 @@ export class GlobalgleClient implements ProviderAdapter {
   }
 
   private headers(idempotencyKey?: string) {
-    const headers = new Headers({ "content-type": "application/json", accept: "application/json" });
+    const headers = new Headers({
+      "content-type": "application/json",
+      accept: "application/json",
+    });
     if (this.apiKey) {
       headers.set("authorization", `Bearer ${this.apiKey}`);
       headers.set("x-api-key", this.apiKey);
@@ -24,6 +27,7 @@ export class GlobalgleClient implements ProviderAdapter {
 
   async request<T = unknown>(request: ProviderRequest): Promise<ProviderResponse<T>> {
     if (!this.apiKey) throw new Error("GLOBALGLE_API_KEY is not configured");
+
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}/${request.path.replace(/^\//, "")}`, {
@@ -38,14 +42,21 @@ export class GlobalgleClient implements ProviderAdapter {
       Object.assign(ambiguous, { code: "PROVIDER_OUTCOME_AMBIGUOUS", cause: error });
       throw ambiguous;
     }
+
     const text = await response.text();
     let data: unknown = null;
-    try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = { raw: text };
+    }
+
     if (!response.ok) {
       const error = new Error(`Globalgle request failed: ${response.status}`);
       Object.assign(error, { status: response.status, data });
       throw error;
     }
+
     return { data: data as T, status: response.status, headers: response.headers };
   }
 
@@ -54,8 +65,14 @@ export class GlobalgleClient implements ProviderAdapter {
       const result = await this.request({ path: "balance", method: "GET" });
       return { ok: true, status: result.status };
     } catch (error) {
-      const status = typeof error === "object" && error && "status" in error ? Number(error.status) : 500;
-      return { ok: false, status, message: error instanceof Error ? error.message : "Provider error" };
+      const status = typeof error === "object" && error && "status" in error
+        ? Number(error.status)
+        : 500;
+      return {
+        ok: false,
+        status,
+        message: error instanceof Error ? error.message : "Provider error",
+      };
     }
   }
 
@@ -64,16 +81,40 @@ export class GlobalgleClient implements ProviderAdapter {
   }
 
   async catalog() {
-    const paths = ["catalog", "services", "products"];
-    let lastError: unknown;
+    // Tudowebs/Globalgle deployments can expose the same catalog under
+    // different resource names. Try the canonical paths first, then the
+    // common list variants. A successful HTTP response with an empty list
+    // must not prevent trying the next endpoint.
+    const paths = [
+      "catalog",
+      "services",
+      "products",
+      "catalog/services",
+      "catalog/products",
+      "services/list",
+      "products/list",
+    ];
+
+    let lastError: unknown = null;
 
     for (const path of paths) {
       try {
         const result = await this.request<unknown>({ path, method: "GET" });
         const normalized = normalizeCatalog(result.data);
+
+        console.info("[cloudmart] provider catalog probe", {
+          path,
+          status: result.status,
+          products: normalized.length,
+        });
+
         if (normalized.length > 0) return normalized;
       } catch (error) {
         lastError = error;
+        console.warn("[cloudmart] provider catalog endpoint failed", {
+          path,
+          error: error instanceof Error ? error.message : "provider error",
+        });
       }
     }
 
@@ -83,78 +124,161 @@ export class GlobalgleClient implements ProviderAdapter {
 }
 
 function normalizeCatalog(input: unknown): ProviderCatalogItem[] {
-  const items = findCatalogArray(input);
+  const items = findCatalogItems(input);
+  const seen = new Set<string>();
+  const normalized: ProviderCatalogItem[] = [];
 
-  return items
-    .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
-    .map((item) => ({
-      slug: String(
-        item.slug ??
-        item.code ??
-        item.service ??
-        item.productId ??
-        item.product_id ??
-        item.id ??
-        ""
+  for (const raw of items) {
+    const item = toRecord(raw);
+    if (!item) continue;
+
+    const slug = firstString(item, [
+      "slug",
+      "code",
+      "service",
+      "serviceId",
+      "service_id",
+      "productId",
+      "product_id",
+      "productCode",
+      "product_code",
+      "id",
+      "uid",
+    ]);
+
+    const name = firstString(item, [
+      "name",
+      "title",
+      "productName",
+      "product_name",
+      "serviceName",
+      "service_name",
+      "serviceTitle",
+      "service_title",
+      "label",
+      "description",
+      "slug",
+      "code",
+      "id",
+    ]);
+
+    if (!slug || !name || slug === "[object Object]") continue;
+
+    const key = slug.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    normalized.push({
+      slug,
+      name,
+      category: firstString(item, ["category", "type", "group", "categoryName", "category_name"]),
+      basePath: firstString(item, ["basePath", "base_path", "endpoint", "path"]),
+      scopes: stringArray(item.scopes),
+      actions: stringArray(item.actions),
+      methods: stringArray(item.methods),
+      requiredFields: stringArray(
+        item.requiredFields ?? item.required_fields ?? item.required ?? item.fields
       ),
-      name: String(
-        item.name ??
-        item.title ??
-        item.productName ??
-        item.product_name ??
-        item.serviceName ??
-        item.service_name ??
-        item.slug ??
-        item.id ??
-        "Unnamed service"
-      ),
-      category:
-        typeof item.category === "string"
-          ? item.category
-          : typeof item.type === "string"
-            ? item.type
-            : typeof item.group === "string"
-              ? item.group
-              : undefined,
-      basePath: typeof item.basePath === "string" ? item.basePath : undefined,
-      scopes: Array.isArray(item.scopes) ? item.scopes.map(String) : undefined,
-      actions: Array.isArray(item.actions) ? item.actions.map(String) : undefined,
-      methods: Array.isArray(item.methods) ? item.methods.map(String) : undefined,
-      requiredFields: Array.isArray(item.requiredFields) ? item.requiredFields.map(String) : undefined,
-      siteTypes: Array.isArray(item.siteTypes) ? item.siteTypes.map(String) : undefined,
+      siteTypes: stringArray(item.siteTypes ?? item.site_types),
       metadata: item,
-    }))
-    .filter((item) => item.slug.length > 0);
+    });
+  }
+
+  return normalized;
 }
 
-function findCatalogArray(input: unknown): unknown[] {
-  if (Array.isArray(input)) return input;
-  if (!input || typeof input !== "object") return [];
+function toRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
 
-  const object = input as Record<string, unknown>;
-  const preferred = ["services", "products", "catalog", "results", "data", "items"];
-
-  for (const key of preferred) {
-    const value = object[key];
-
-    if (Array.isArray(value)) return value;
-
-    if (value && typeof value === "object") {
-      const nested = findCatalogArray(value);
-      if (nested.length) return nested;
-    }
+function firstString(item: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = item[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
   }
+  return undefined;
+}
 
-  for (const value of Object.values(object)) {
-    if (Array.isArray(value) && value.some((item) => item && typeof item === "object")) {
-      return value;
+function stringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const result = value
+    .map((entry) => typeof entry === "string" || typeof entry === "number" ? String(entry) : null)
+    .filter((entry): entry is string => Boolean(entry));
+  return result.length ? result : undefined;
+}
+
+function findCatalogItems(input: unknown): unknown[] {
+  const candidates: unknown[][] = [];
+  const visited = new Set<object>();
+
+  const walk = (value: unknown, depth: number) => {
+    if (depth > 8 || value === null || value === undefined) return;
+
+    if (Array.isArray(value)) {
+      if (value.some((entry) => looksLikeProduct(entry))) candidates.push(value);
+      for (const entry of value) walk(entry, depth + 1);
+      return;
     }
 
-    if (value && typeof value === "object") {
-      const nested = findCatalogArray(value);
-      if (nested.length) return nested;
-    }
-  }
+    if (typeof value !== "object") return;
+    const object = value as Record<string, unknown>;
+    if (visited.has(object)) return;
+    visited.add(object);
 
-  return [];
+    const priorityKeys = [
+      "services",
+      "products",
+      "catalog",
+      "results",
+      "data",
+      "items",
+      "records",
+      "rows",
+      "list",
+    ];
+
+    for (const key of priorityKeys) {
+      if (key in object) walk(object[key], depth + 1);
+    }
+
+    for (const [key, child] of Object.entries(object)) {
+      if (!priorityKeys.includes(key)) walk(child, depth + 1);
+    }
+  };
+
+  walk(input, 0);
+
+  const best = candidates.sort((a, b) => b.filter(looksLikeProduct).length - a.filter(looksLikeProduct).length)[0];
+  return best ?? (Array.isArray(input) ? input : []);
+}
+
+function looksLikeProduct(value: unknown): boolean {
+  const item = toRecord(value);
+  if (!item) return false;
+
+  return [
+    "id",
+    "uid",
+    "slug",
+    "code",
+    "service",
+    "serviceId",
+    "service_id",
+    "productId",
+    "product_id",
+    "productCode",
+    "product_code",
+    "name",
+    "title",
+    "productName",
+    "product_name",
+    "serviceName",
+    "service_name",
+  ].some((key) => {
+    const value = item[key];
+    return typeof value === "string" || typeof value === "number";
+  });
 }
