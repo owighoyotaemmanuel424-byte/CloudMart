@@ -40,7 +40,7 @@ export default function Home() {
           </p>
           <div className="hero-actions">
             <Link href="/login" className="primary-btn">Start using CloudMart <span>→</span></Link>
-            <a href="#services" className="secondary-btn">Explore services</a>
+            <a href="/catalog" className="secondary-btn">Explore services</a>
           </div>
           <div className="hero-proof">
             <div className="proof-avatars"><span>CM</span><span>+</span></div>
@@ -80,7 +80,7 @@ export default function Home() {
               <span className="service-icon">{service.icon}</span>
               <h3>{service.title}</h3>
               <p>{service.text}</p>
-              <Link href="/login">Explore <span>↗</span></Link>
+              <Link href="/catalog">Explore <span>↗</span></Link>
             </article>
           ))}
         </div>
