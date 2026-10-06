@@ -51,7 +51,7 @@ export function verifyPaystackSignature(rawBody: string, signature: string | nul
   const expected = crypto.createHmac("sha512", key).update(rawBody).digest("hex");
   return signature.length === expected.length &&
     crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
-
+}
 
 export async function verifyPaystackTransaction(reference: string) {
   if (!reference) throw new Error("Paystack reference is required");
