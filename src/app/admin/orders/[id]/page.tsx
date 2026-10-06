@@ -6,7 +6,7 @@ const money=(v:string)=>`₦${(Number(v)/100).toLocaleString("en-NG",{minimumFra
 const date=(v:string)=>new Date(v).toLocaleString();
 
 export default function AdminOrderDetail({params}:{params:Promise<{id:string}>}){
- const [id,setId]=useState(""),[data,setData]=useState<any>(null),[error,setError]=useState("");
+ const [id,setId]=useState(""),[data,setData]=useState<any>(null),[evidence,setEvidence]=useState<any>(null),[error,setError]=useState("");
  useEffect(()=>{params.then(p=>setId(p.id))},[params]);
  useEffect(()=>{if(!id)return;fetch("/api/admin/orders/"+encodeURIComponent(id)).then(async r=>{const b=await r.json();if(!r.ok)throw new Error(b.error||"Unable to load order");return b}).then(setData).catch(e=>setError(e.message))},[id]);
  if(error)return <main className="shell"><div className="notice error">{error}</div><Link className="button" href="/admin">Back to admin</Link></main>;
@@ -25,6 +25,7 @@ export default function AdminOrderDetail({params}:{params:Promise<{id:string}>})
    <div className="card"><h2>Order timeline</h2><div className="timeline">{o.events.map((e:any)=><div className="timeline-item" key={e.id}><span></span><div><b>{e.type.replaceAll("_"," ")}</b><small>{date(e.createdAt)}</small></div></div>)}</div></div>
    <div className="card"><h2>Webhook reconciliation</h2>{o.webhookEvents?.length?<div className="timeline">{o.webhookEvents.map((e:any)=><div className="timeline-item" key={e.id}><span></span><div><b>{e.eventType}</b><small>{date(e.createdAt)} · {e.processedAt?"processed":"pending"}</small></div></div>)}</div>:<p>No matching provider webhook events were found.</p>}</div>
   </section>
+  <section className="card"><h2>Reconciliation evidence</h2><button className="button" onClick={()=>fetch("/api/admin/orders/"+encodeURIComponent(id)+"/reconcile").then(r=>r.json()).then(setEvidence)}>Check provider evidence</button>{evidence&&<div className="notice"><b>{evidence.reconcilable?"Terminal provider evidence found":"No terminal provider evidence"}</b>{evidence.evidence?.length?<div className="timeline">{evidence.evidence.map((e:any)=><div className="timeline-item" key={e.id}><span></span><div><b>{e.status}</b><small>{e.eventType} · {date(e.createdAt)}</small></div></div>)}</div>:<p>Keep this order PROCESSING until the provider confirms a terminal outcome.</p>}</div>}</section>
   <section className="card"><h2>Provider response</h2><pre className="json-view">{JSON.stringify(o.responseSnapshot||{},null,2)}</pre></section>
  </main>;
 }
