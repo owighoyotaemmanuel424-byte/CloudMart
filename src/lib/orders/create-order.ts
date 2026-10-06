@@ -53,18 +53,40 @@ export async function createOrder(input: CreateOrderInput) {
   if (!providerPath) throw new Error("provider_path_unavailable");
 
   const markupPercent = markupForProviderCurrency(pricing.providerCurrency);
-  const order = await db.order.create({
-    data: {
-      userId: input.userId,
-      serviceId: product.serviceId,
-      provider: providerName,
-      amountMinor: pricing.sellMinor,
-      providerAmount: pricing.providerAmount,
-      markupPercent,
-      idempotencyKey,
-      requestSnapshot: input.request as Prisma.InputJsonValue,
-    },
-  });
+
+  let order;
+  try {
+    order = await db.order.create({
+      data: {
+        userId: input.userId,
+        serviceId: product.serviceId,
+        provider: providerName,
+        amountMinor: pricing.sellMinor,
+        providerAmount: pricing.providerAmount,
+        markupPercent,
+        idempotencyKey,
+        requestSnapshot: input.request as Prisma.InputJsonValue,
+      },
+    });
+  } catch (error) {
+    // The unique idempotencyKey constraint is the final race-safe gate.
+    // If two requests arrive simultaneously, only one creates the order;
+    // the loser replays the already-created order instead of charging twice.
+    if (
+      requestedKey &&
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      const existing = await db.order.findUnique({ where: { idempotencyKey } });
+      if (existing) {
+        if (existing.userId !== input.userId) {
+          throw new Error("Idempotency key already belongs to another account");
+        }
+        return { orderId: existing.id, status: existing.status, replayed: true };
+      }
+    }
+    throw error;
+  }
 
   try {
     await debitWallet({
