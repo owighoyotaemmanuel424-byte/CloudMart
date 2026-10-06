@@ -153,6 +153,7 @@ model WebhookEvent {
   eventType   String
   payload     Json
   processedAt DateTime?
+  processingAt DateTime?
   createdAt   DateTime @default(now())
   @@unique([provider, externalId])
 }
