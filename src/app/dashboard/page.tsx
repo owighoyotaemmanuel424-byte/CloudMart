@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type Service = { slug: string; name: string; category?: string };
@@ -14,6 +15,8 @@ export default function Dashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [deposit, setDeposit] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,6 +40,14 @@ export default function Dashboard() {
     if (r.ok) location.reload();
   }
 
+  async function createDepositIntent() {
+    const minor = Math.round(Number(deposit) * 100);
+    if (!Number.isFinite(minor) || minor < 100) { setMessage("Enter at least ₦1.00."); return; }
+    const r = await fetch("/api/wallet/deposit-intents", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ amountMinor: String(minor) }) });
+    const body = await r.json();
+    setMessage(r.ok ? `Deposit intent created: ${body.intent.reference}. Payment gateway connection is the next step.` : body.error || "Unable to create deposit intent");
+  }
+
   if (loading) return <main className="shell"><div className="loading">Loading CloudMart…</div></main>;
 
   return <main className="shell">
@@ -44,8 +55,9 @@ export default function Dashboard() {
     {!me?.authenticated ? <section className="auth card"><h1>Everything digital, in one place.</h1><p>Connect once. Buy digital services from a unified marketplace.</p><div className="fields"><input placeholder="Name" value={name} onChange={e=>setName(e.target.value)}/><input placeholder="Email address" value={email} onChange={e=>setEmail(e.target.value)}/><button onClick={register}>Create account</button></div></section> :
     <>
       <section className="hero"><div><small>Available balance</small><h1>₦{(Number(wallet.balanceMinor)/100).toLocaleString("en-NG",{minimumFractionDigits:2})}</h1><p>{me.user?.name || me.user?.email}</p></div><div className="pill">{wallet.currency}</div></section>
-      <h2>Marketplace</h2><div className="grid">{services.map(s=><article className="card" key={s.slug}><span className="tag">{s.category || "Digital"}</span><h3>{s.name}</h3><p>Available through Globalgle</p><button>View service</button></article>)}</div>
-      <h2>Recent orders</h2><div className="orders">{orders.length ? orders.map(o=><div className="order" key={o.id}><div><b>{o.service.name}</b><small>{new Date(o.createdAt).toLocaleString()}</small></div><strong>{o.status}</strong></div>) : <div className="card">No orders yet.</div>}</div>
+      <section className="card funding"><h2>Fund wallet</h2><p>Create a secure deposit intent. No balance is credited until a payment provider confirms it.</p><div className="inline"><input inputMode="decimal" placeholder="Amount in NGN" value={deposit} onChange={e=>setDeposit(e.target.value)}/><button onClick={createDepositIntent}>Continue</button></div>{message && <p className="notice">{message}</p>}</section>
+      <h2>Marketplace</h2><div className="grid">{services.map(s=><article className="card" key={s.slug}><span className="tag">{s.category || "Digital"}</span><h3>{s.name}</h3><p>Live service catalog through Globalgle.</p><Link className="button" href={`/services/${encodeURIComponent(s.slug)}`}>View service</Link></article>)}</div>
+      <h2>Recent orders</h2><div className="orders">{orders.length ? orders.map(o=><Link className="order" href={`/orders/${o.id}`} key={o.id}><div><b>{o.service.name}</b><small>{new Date(o.createdAt).toLocaleString()}</small></div><strong>{o.status}</strong></Link>) : <div className="card">No orders yet.</div>}</div>
     </>}
   </main>;
 }
