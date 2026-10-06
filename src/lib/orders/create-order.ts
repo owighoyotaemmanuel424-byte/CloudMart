@@ -38,6 +38,7 @@ export async function createOrder(input: CreateOrderInput) {
       provider: providerName,
       amountMinor: input.amountMinor,
       markupPercent: 0,
+      idempotencyKey,
       requestSnapshot: input.request,
     },
   });
