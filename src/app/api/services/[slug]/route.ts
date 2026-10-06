@@ -4,12 +4,23 @@ import { resolveProductPricing } from "@/lib/catalog/pricing";
 
 export async function GET(_request: Request, context: { params: Promise<{ slug: string }> }) {
   const { slug } = await context.params;
+  const decodedSlug = decodeURIComponent(slug).trim().toLowerCase();
+
   try {
-    const item = (await getProvider("globalgle").catalog()).find(service => service.slug === slug);
-    if (!item) return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
+    const item = (await getProvider("globalgle").catalog()).find(
+      service => service.slug.trim().toLowerCase() === decodedSlug,
+    );
+
+    if (!item) {
+      return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
+    }
+
     const pricing = resolveProductPricing(item.metadata);
+
     return NextResponse.json({
       ok: true,
+      provider: "globalgle",
+      source: "live",
       service: {
         ...item,
         pricing: pricing ? {
