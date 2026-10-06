@@ -7,7 +7,7 @@ function stringValue(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function extractString(payload: Record<string, unknown>, keys: string[]) {
+function extractString(payload: Record<string, unknown>, keys: string[]): string | undefined {
   for (const key of keys) {
     const direct = stringValue(payload[key]);
     if (direct) return direct;
