@@ -21,12 +21,21 @@ export class GlobalgleClient implements ProviderAdapter {
 
   async request<T = unknown>(request: ProviderRequest): Promise<ProviderResponse<T>> {
     if (!this.apiKey) throw new Error("GLOBALGLE_API_KEY is not configured");
-    const response = await fetch(`${this.baseUrl}/${request.path.replace(/^\//, "")}`, {
-      method: request.method,
-      headers: this.headers(request.idempotencyKey),
-      body: request.body === undefined ? undefined : JSON.stringify(request.body),
-      cache: "no-store"
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/${request.path.replace(/^\\//, "")}`, {
+        method: request.method,
+        headers: this.headers(request.idempotencyKey),
+        body: request.body === undefined ? undefined : JSON.stringify(request.body),
+        cache: "no-store",
+        signal: AbortSignal.timeout(20_000),
+      });
+    } catch (error) {
+      // Transport failure is ambiguous: the provider may have accepted the request.
+      const ambiguous = new Error("Globalgle request outcome is ambiguous");
+      Object.assign(ambiguous, { code: "PROVIDER_OUTCOME_AMBIGUOUS", cause: error });
+      throw ambiguous;
+    }
     const text = await response.text();
     let data: unknown = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
