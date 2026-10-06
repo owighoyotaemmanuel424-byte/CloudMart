@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { verifyPaystackSignature } from "@/lib/payments/paystack";
 
@@ -26,11 +27,41 @@ export async function POST(request: Request) {
       if (!deposit) throw new Error("Unknown deposit reference");
       if (deposit.status === "CREDITED") return { duplicate: true };
       if (BigInt(amount) !== deposit.amountMinor) throw new Error("Paystack amount mismatch");
-      const wallet = await tx.wallet.upsert({ where: { userId: deposit.userId }, create: { userId: deposit.userId, balanceMinor: deposit.amountMinor }, update: { balanceMinor: { increment: deposit.amountMinor } } });
-      await tx.ledgerEntry.create({ data: { userId: deposit.userId, walletId: wallet.id, type: "CREDIT", amountMinor: deposit.amountMinor, currency: deposit.currency, reference: `PAYSTACK_${deposit.reference}`, description: "Wallet funding via Paystack", metadata: { depositId: deposit.id, providerReference: reference } } });
-      await tx.walletDeposit.update({ where: { id: deposit.id }, data: { status: "CREDITED", providerReference: reference, metadata: { creditedBy: "paystack_webhook" } } });
+
+      const ledgerReference = `PAYSTACK_${deposit.reference}`;
+      const existingLedger = await tx.ledgerEntry.findUnique({ where: { reference: ledgerReference } });
+
+      if (!existingLedger) {
+        const wallet = await tx.wallet.upsert({
+          where: { userId: deposit.userId },
+          create: { userId: deposit.userId, balanceMinor: deposit.amountMinor },
+          update: { balanceMinor: { increment: deposit.amountMinor } },
+        });
+
+        try {
+          await tx.ledgerEntry.create({
+            data: {
+              userId: deposit.userId,
+              walletId: wallet.id,
+              type: "CREDIT",
+              amountMinor: deposit.amountMinor,
+              currency: deposit.currency,
+              reference: ledgerReference,
+              description: "Wallet funding via Paystack",
+              metadata: { depositId: deposit.id, providerReference: reference },
+            },
+          });
+        } catch (error) {
+          if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+        }
+      }
+
+      await tx.walletDeposit.update({
+        where: { id: deposit.id },
+        data: { status: "CREDITED", providerReference: reference, metadata: { creditedBy: "paystack_webhook" } },
+      });
       await tx.webhookEvent.update({ where: { id: webhook.id }, data: { processedAt: new Date() } });
-      return { duplicate: false };
+      return { duplicate: Boolean(existingLedger) };
     });
     return NextResponse.json({ ok: true, duplicate: result.duplicate });
   } catch (error) {
