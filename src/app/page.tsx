@@ -27,7 +27,7 @@ export default function Home() {
         </div>
         <div className="nav-actions">
           <Link href="/login" className="nav-login">Sign in</Link>
-          <Link href="/dashboard" className="nav-cta">Get started <span>→</span></Link>
+          <Link href="/login" className="nav-cta">Get started <span>→</span></Link>
         </div>
       </nav>
 
@@ -39,7 +39,7 @@ export default function Home() {
             Buy digital services, manage your wallet and track every order from one simple CloudMart account.
           </p>
           <div className="hero-actions">
-            <Link href="/dashboard" className="primary-btn">Start using CloudMart <span>→</span></Link>
+            <Link href="/login" className="primary-btn">Start using CloudMart <span>→</span></Link>
             <a href="#services" className="secondary-btn">Explore services</a>
           </div>
           <div className="hero-proof">
@@ -80,7 +80,7 @@ export default function Home() {
               <span className="service-icon">{service.icon}</span>
               <h3>{service.title}</h3>
               <p>{service.text}</p>
-              <Link href="/dashboard">Explore <span>↗</span></Link>
+              <Link href="/login">Explore <span>↗</span></Link>
             </article>
           ))}
         </div>
@@ -108,7 +108,7 @@ export default function Home() {
       <section className="final-cta">
         <span className="section-kicker">READY WHEN YOU ARE</span>
         <h2>Your digital marketplace<br /><em>starts here.</em></h2>
-        <Link href="/dashboard" className="primary-btn">Enter CloudMart <span>→</span></Link>
+        <Link href="/login" className="primary-btn">Enter CloudMart <span>→</span></Link>
       </section>
 
       <footer className="landing-footer">
