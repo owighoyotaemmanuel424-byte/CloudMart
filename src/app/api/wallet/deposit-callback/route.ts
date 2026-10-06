@@ -34,7 +34,7 @@ export async function GET(request: Request) {
       const current = await txdb.walletDeposit.findUnique({ where: { id: deposit.id } });
       if (!current || current.status === "CREDITED") return;
 
-      await txdb.wallet.upsert({
+      const wallet = await txdb.wallet.upsert({
         where: { userId: current.userId },
         update: { balanceMinor: { increment: current.amountMinor }, currency: current.currency },
         create: { userId: current.userId, balanceMinor: current.amountMinor, currency: current.currency },
@@ -42,6 +42,7 @@ export async function GET(request: Request) {
 
       await txdb.ledgerEntry.create({
         data: {
+          walletId: wallet.id,
           userId: current.userId,
           type: "CREDIT",
           amountMinor: current.amountMinor,
