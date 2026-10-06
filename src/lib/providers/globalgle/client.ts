@@ -14,7 +14,7 @@ export class GlobalgleClient implements ProviderAdapter {
 
   private headers(idempotencyKey?: string) {
     const headers = new Headers({ "content-type": "application/json", accept: "application/json" });
-    if (this.apiKey) headers.set("authorization", `Bearer ${this.apiKey}`);
+    if (this.apiKey) {\n      headers.set("authorization", `Bearer ${this.apiKey}`);\n      headers.set("x-api-key", this.apiKey);\n    }
     if (idempotencyKey) headers.set("idempotency-key", idempotencyKey);
     return headers;
   }
@@ -62,35 +62,17 @@ export class GlobalgleClient implements ProviderAdapter {
   }
 
   async catalog() {
-    const result = await this.request<unknown>({ path: "catalog", method: "GET" });
-    return normalizeCatalog(result.data);
+    const paths = ["catalog", "services", "products"];
+    let lastError: unknown;
+    for (const path of paths) {
+      try {
+        const result = await this.request<unknown>({ path, method: "GET" });
+        const normalized = normalizeCatalog(result.data);
+        if (normalized.length > 0) return normalized;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (lastError) throw lastError;
+    return [];
   }
-}
-
-function normalizeCatalog(input: unknown): ProviderCatalogItem[] {
-  let items: unknown = input;
-  for (let depth = 0; depth < 3; depth++) {
-    if (Array.isArray(items)) break;
-    if (!items || typeof items !== "object") { items = []; break; }
-    const object = items as Record<string, unknown>;
-    const next = object.services ?? object.products ?? object.catalog ?? object.results ?? object.data;
-    if (next === undefined) { items = []; break; }
-    items = next;
-  }
-
-  return (Array.isArray(items) ? items : [])
-    .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
-    .map((item) => ({
-      slug: String(item.slug ?? item.code ?? item.id ?? ""),
-      name: String(item.name ?? item.title ?? item.productName ?? item.slug ?? item.id ?? "Unnamed service"),
-      category: typeof item.category === "string" ? item.category : typeof item.type === "string" ? item.type : undefined,
-      basePath: typeof item.basePath === "string" ? item.basePath : undefined,
-      scopes: Array.isArray(item.scopes) ? item.scopes.map(String) : undefined,
-      actions: Array.isArray(item.actions) ? item.actions.map(String) : undefined,
-      methods: Array.isArray(item.methods) ? item.methods.map(String) : undefined,
-      requiredFields: Array.isArray(item.requiredFields) ? item.requiredFields.map(String) : undefined,
-      siteTypes: Array.isArray(item.siteTypes) ? item.siteTypes.map(String) : undefined,
-      metadata: item
-    }))
-    .filter((item) => item.slug.length > 0);
-}
