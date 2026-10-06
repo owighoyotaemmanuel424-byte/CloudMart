@@ -22,6 +22,13 @@ function extractString(payload: Record<string, unknown>, keys: string[]) {
   return undefined;
 }
 
+function canApplyProviderStatus(current: OrderStatus, incoming: OrderStatus) {
+  if (current === OrderStatus.PENDING || current === OrderStatus.PROCESSING) {
+    return [OrderStatus.PROCESSING, OrderStatus.COMPLETED, OrderStatus.FAILED, OrderStatus.CANCELLED].includes(incoming);
+  }
+  return false;
+}
+
 function normalizeStatus(payload: Record<string, unknown>) {
   const raw = extractString(payload, ["status", "orderStatus", "state", "event"]);
   if (!raw) return undefined;
@@ -110,8 +117,18 @@ export async function POST(request: Request) {
     const current = await tx.order.findUnique({ where: { id: order.id } });
     if (!current) return;
 
-    const terminal = [OrderStatus.COMPLETED, OrderStatus.REFUNDED, OrderStatus.CANCELLED].includes(current.status);
-    if (terminal) {
+    if (!canApplyProviderStatus(current.status, status)) {
+      await tx.orderEvent.create({
+        data: {
+          orderId: current.id,
+          type: "provider_webhook_ignored_transition",
+          payload: {
+            source: "globalgle",
+            incomingStatus: status,
+            currentStatus: current.status,
+          },
+        },
+      });
       await tx.webhookEvent.update({
         where: { id: event.id },
         data: { processedAt: new Date(), processingAt: null },
