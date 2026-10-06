@@ -7,8 +7,18 @@ export async function syncProviderCatalog(providerName = "globalgle") {
   const catalog = await provider.catalog();
 
   let products = 0;
-  for (const item of catalog) {
-    const service = await db.service.upsert({
+
+  await db.$transaction(async (tx) => {
+    // A successful full sync is authoritative for this provider. Disable
+    // previously known products first so removed provider offerings cannot
+    // remain purchasable after the provider catalog changes.
+    await tx.providerProduct.updateMany({
+      where: { provider: providerName },
+      data: { enabled: false },
+    });
+
+    for (const item of catalog) {
+      const service = await tx.service.upsert({
       where: { slug: item.slug },
       create: {
         slug: item.slug,
@@ -23,7 +33,7 @@ export async function syncProviderCatalog(providerName = "globalgle") {
       },
     });
 
-    await db.providerProduct.upsert({
+      await tx.providerProduct.upsert({
       where: {
         provider_externalSlug: {
           provider: providerName,
@@ -45,8 +55,33 @@ export async function syncProviderCatalog(providerName = "globalgle") {
         metadata: item as object,
       },
     });
-    products++;
-  }
+      await tx.providerProduct.updateMany({
+        where: { provider: providerName, externalSlug: item.slug },
+        data: { enabled: true },
+      });
+      products++;
+    }
+
+    // A service remains enabled only when at least one provider product for it
+    // is still enabled. This prevents stale service routes from appearing live.
+    await tx.service.updateMany({
+      where: {
+        products: {
+          none: { enabled: true },
+        },
+      },
+      data: { enabled: false },
+    });
+
+    await tx.service.updateMany({
+      where: {
+        products: {
+          some: { provider: providerName, enabled: true },
+        },
+      },
+      data: { enabled: true },
+    });
+  });
 
   return { provider: providerName, services: catalog.length, products };
 }
