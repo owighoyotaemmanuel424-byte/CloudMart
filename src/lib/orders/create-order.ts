@@ -69,71 +69,79 @@ export async function createOrder(input: CreateOrderInput) {
   const providerName = "globalgle";
   const provider = getProvider(providerName);
 
-  // Tudowebs is the source of truth for the public catalog. Keep a local
-  // ProviderProduct mirror for orders/audit, but hydrate it from the live
-  // provider when a product is not already present in Prisma.
+  const serviceSlug = input.serviceSlug.trim().toLowerCase();
   let product = await db.providerProduct.findFirst({
     where: {
       provider: providerName,
-      externalSlug: input.serviceSlug,
+      externalSlug: serviceSlug,
       enabled: true,
       service: { enabled: true },
     },
     include: { service: true },
   });
 
-  if (!product) {
-    const live = (await provider.catalog()).find(item => item.slug === input.serviceSlug);
-    if (!live) throw new Error("Service is unavailable");
+  // Refresh the cached product from Tudowebs on checkout whenever the live
+  // catalog is reachable. This prevents stale purchase paths/prices from
+  // surviving after the provider changes its catalog.
+  try {
+    const live = (await provider.catalog()).find(item => item.slug.trim().toLowerCase() === serviceSlug);
+    if (live) {
+      const metadata = {
+        ...((live.metadata ?? {}) as Record<string, unknown>),
+        purchasePath: live.purchasePath,
+        purchaseMethod: live.purchaseMethod,
+      } as Prisma.InputJsonValue;
 
-    const metadata = {
-      ...((live.metadata ?? {}) as Record<string, unknown>),
-      purchasePath: live.purchasePath,
-      purchaseMethod: live.purchaseMethod,
-    } as Prisma.InputJsonValue;
-    const service = await db.service.upsert({
-      where: { slug: live.slug },
-      create: {
-        slug: live.slug,
-        name: live.name,
-        category: live.category || "Digital",
-        metadata,
-        enabled: true,
-      },
-      update: {
-        name: live.name,
-        category: live.category || "Digital",
-        metadata,
-        enabled: true,
-      },
-    });
+      const service = await db.service.upsert({
+        where: { slug: live.slug },
+        create: {
+          slug: live.slug,
+          name: live.name,
+          category: live.category || "Digital",
+          metadata,
+          enabled: true,
+        },
+        update: {
+          name: live.name,
+          category: live.category || "Digital",
+          metadata,
+          enabled: true,
+        },
+      });
 
-    product = await db.providerProduct.upsert({
-      where: {
-        provider_externalSlug: {
+      product = await db.providerProduct.upsert({
+        where: {
+          provider_externalSlug: {
+            provider: providerName,
+            externalSlug: live.slug,
+          },
+        },
+        create: {
           provider: providerName,
           externalSlug: live.slug,
+          name: live.name,
+          category: live.category,
+          metadata,
+          serviceId: service.id,
+          enabled: true,
         },
-      },
-      create: {
-        provider: providerName,
-        externalSlug: live.slug,
-        name: live.name,
-        category: live.category,
-        metadata,
-        serviceId: service.id,
-        enabled: true,
-      },
-      update: {
-        name: live.name,
-        category: live.category,
-        metadata,
-        serviceId: service.id,
-        enabled: true,
-      },
-      include: { service: true },
-    });
+        update: {
+          name: live.name,
+          category: live.category,
+          metadata,
+          serviceId: service.id,
+          enabled: true,
+        },
+        include: { service: true },
+      });
+    }
+  } catch {
+    // Keep the cached product as a fallback only when the live catalog is
+    // temporarily unreachable; the actual provider request below still has
+    // to succeed before the order is accepted.
   }
+
+  if (!product) throw new Error("Service is unavailable");
 
   const pricing = resolveProductPricing(product.metadata);
   if (!pricing) throw new Error("pricing_unavailable");
@@ -208,7 +216,7 @@ export async function createOrder(input: CreateOrderInput) {
       amountMinor: pricing.sellMinor,
       reference: `order:${order.id}:debit`,
       description: `CloudMart order ${order.id}`,
-      metadata: { orderId: order.id, service: input.serviceSlug } as Prisma.InputJsonValue,
+      metadata: { orderId: order.id, service: serviceSlug } as Prisma.InputJsonValue,
     });
 
     await db.order.update({
