@@ -23,7 +23,7 @@ export class GlobalgleClient implements ProviderAdapter {
     if (!this.apiKey) throw new Error("GLOBALGLE_API_KEY is not configured");
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}/${request.path.replace(/^\\//, "")}`, {
+      response = await fetch(`${this.baseUrl}/${request.path.replace(/^\//, "")}`, {
         method: request.method,
         headers: this.headers(request.idempotencyKey),
         body: request.body === undefined ? undefined : JSON.stringify(request.body),
