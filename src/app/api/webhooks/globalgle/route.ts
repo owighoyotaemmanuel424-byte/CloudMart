@@ -98,7 +98,12 @@ export async function POST(request: Request) {
       });
     }
 
-    if ([OrderStatus.COMPLETED, OrderStatus.REFUNDED, OrderStatus.CANCELLED].includes(current.status)) {\n      await tx.webhookEvent.update({ where: { id: event.id }, data: { processedAt: new Date() } });\n      return;\n    }\n\n    await tx.orderEvent.create({
+    if ([OrderStatus.COMPLETED, OrderStatus.REFUNDED, OrderStatus.CANCELLED].includes(current.status)) {
+      await tx.webhookEvent.update({ where: { id: event.id }, data: { processedAt: new Date() } });
+      return;
+    }
+
+    await tx.orderEvent.create({
       data: {
         orderId: current.id,
         type: `provider_webhook_${status.toLowerCase()}`,
