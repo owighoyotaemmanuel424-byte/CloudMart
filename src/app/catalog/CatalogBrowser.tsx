@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import "./catalog.css";
 import { useEffect,useMemo,useState } from "react";
 type Service={slug:string;name:string;category?:string;requiredFields?:string[];pricing:{providerAmount:string;providerCurrency:string;sellMinor:string}|null};
 const label=(v:string)=>v.replace(/[-_]+/g," ").replace(/\b\w/g,c=>c.toUpperCase());
