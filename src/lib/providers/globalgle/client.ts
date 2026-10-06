@@ -145,6 +145,12 @@ function normalizeCatalog(input: unknown): ProviderCatalogItem[] {
     seen.add(key);
 
     const metadata = item;
+    const purchaseAction = selectPurchaseAction(item.actions);
+    const rawRequiredFields = stringArrayDeep(item, [
+      "requiredFields", "required_fields", "required", "fields", "inputs", "parameters", "formFields", "form_fields",
+    ]) ?? [];
+    const requiredFields = mergePathParameters(rawRequiredFields, purchaseAction?.path);
+
     normalized.push({
       slug,
       name,
@@ -163,14 +169,12 @@ function normalizeCatalog(input: unknown): ProviderCatalogItem[] {
       basePath: firstStringDeep(item, [
         "basePath", "base_path", "endpoint", "path", "url", "route", "apiPath", "api_path",
       ]),
-      purchasePath: selectPurchaseAction(item.actions)?.path,
-      purchaseMethod: selectPurchaseAction(item.actions)?.method,
+      purchasePath: purchaseAction?.path,
+      purchaseMethod: purchaseAction?.method,
       scopes: stringArray(item.scopes),
       actions: actionPaths(item.actions),
       methods: stringArray(item.methods),
-      requiredFields: stringArrayDeep(item, [
-        "requiredFields", "required_fields", "required", "fields", "inputs", "parameters", "formFields", "form_fields",
-      ]),
+      requiredFields,
       siteTypes: stringArray(item.siteTypes ?? item.site_types),
       metadata,
     });
@@ -268,11 +272,37 @@ type CatalogAction = {
   required?: unknown;
 };
 
+function mergePathParameters(fields: string[], path?: string) {
+  if (!path) return fields.length ? fields : undefined;
+  const parameters = Array.from(path.matchAll(/\{([^}]+)\}/g))
+    .map(match => match[1].trim())
+    .filter(Boolean);
+  const merged = Array.from(new Set([...fields, ...parameters]));
+  return merged.length ? merged : undefined;
+}
+
 function actionRecords(value: unknown): CatalogAction[] {
   if (!Array.isArray(value)) return [];
   return value
     .map(entry => toRecord(entry))
     .filter((entry): entry is CatalogAction => Boolean(entry));
+}
+
+function normalizeProviderPath(path: string) {
+  const trimmed = path.trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const url = new URL(trimmed);
+      return normalizeProviderPath(url.pathname + (url.search || ""));
+    } catch {
+      return trimmed.replace(/^\//, "");
+    }
+  }
+
+  return trimmed
+    .replace(/^\/+/, "")
+    .replace(/^api\/v1\//i, "")
+    .replace(/^v1\//i, "");
 }
 
 function actionPaths(value: unknown): string[] | undefined {
@@ -298,7 +328,11 @@ function selectPurchaseAction(value: unknown): { path: string; method: "POST" | 
       if (/\/quote|\/search|\/pricing|\/config|\/providers|\/countries|\/languages|\/voices\b|blocked-countries/.test(normalizedPath)) score -= 20;
       if (/\/{id}|\/{domain}/.test(path)) score += 3;
 
-      return { path, method: method as "POST" | "PUT" | "PATCH", score };
+      return {
+        path: normalizeProviderPath(path),
+        method: method as "POST" | "PUT" | "PATCH",
+        score,
+      };
     })
     .filter((entry): entry is { path: string; method: "POST" | "PUT" | "PATCH"; score: number } => Boolean(entry))
     .sort((a, b) => b.score - a.score);
