@@ -1,4 +1,4 @@
-import { getEnv } from "@/lib/env";
+import { getProviderEnv } from "@/lib/env";
 import type { ProviderAdapter, ProviderCatalogItem, ProviderRequest, ProviderResponse } from "@/lib/providers/types";
 
 export class GlobalgleClient implements ProviderAdapter {
@@ -7,7 +7,7 @@ export class GlobalgleClient implements ProviderAdapter {
   private readonly apiKey?: string;
 
   constructor() {
-    const env = getEnv();
+    const env = getProviderEnv();
     this.baseUrl = env.GLOBALGLE_API_BASE_URL.replace(/\/$/, "");
     this.apiKey = env.GLOBALGLE_API_KEY;
   }
