@@ -14,7 +14,10 @@ export class GlobalgleClient implements ProviderAdapter {
 
   private headers(idempotencyKey?: string) {
     const headers = new Headers({ "content-type": "application/json", accept: "application/json" });
-    if (this.apiKey) {\n      headers.set("authorization", `Bearer ${this.apiKey}`);\n      headers.set("x-api-key", this.apiKey);\n    }
+    if (this.apiKey) {
+      headers.set("authorization", `Bearer ${this.apiKey}`);
+      headers.set("x-api-key", this.apiKey);
+    }
     if (idempotencyKey) headers.set("idempotency-key", idempotencyKey);
     return headers;
   }
@@ -115,4 +118,4 @@ function findCatalogArray(input: unknown): unknown[] {
     }
   }
   return [];
-}\n
+}
