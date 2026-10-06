@@ -13,12 +13,13 @@ jobs:
       GLOBALGLE_API_BASE_URL: https://tudowebs.com/api/v1
       CLOUDMART_DEFAULT_MARKUP_PERCENT: "15"
       CLOUDMART_USD_TO_NGN: "1600"
+      CLOUDMART_SESSION_SECRET: ci-session-secret
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
-          cache: npm
+          package-manager-cache: false
       - run: npm install
       - run: npx prisma generate
       - run: npm run build
