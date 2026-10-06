@@ -78,7 +78,7 @@ export class GlobalgleClient implements ProviderAdapter {
     }
     if (lastError) throw lastError;
     return [];
-  }function normalizeCatalog(input: unknown): ProviderCatalogItem[] {
+  }\n}\n\nfunction normalizeCatalog(input: unknown): ProviderCatalogItem[] {
   const items = findCatalogArray(input);
   return items
     .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
