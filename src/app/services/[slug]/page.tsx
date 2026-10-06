@@ -11,6 +11,8 @@ type Service = {
   category?: string;
   description?: string;
   providerId?: string;
+  purchasePath?: string;
+  purchaseMethod?: "POST" | "PUT" | "PATCH";
   requiredFields?: string[];
   pricing: { providerAmount: string; providerCurrency: string; sellMinor: string } | null;
 };
@@ -104,6 +106,13 @@ export default function ServicePage() {
           <div className="service-reference">
             <span>Provider product</span>
             <code>{service.providerId}</code>
+          </div>
+        )}
+
+        {(service.purchasePath || service.purchaseMethod) && (
+          <div className="service-reference">
+            <span>Live purchase action</span>
+            <code>{service.purchaseMethod ?? "POST"} {service.purchasePath ?? "provider action"}</code>
           </div>
         )}
 
