@@ -26,6 +26,19 @@ const price = (service: Service) =>
     ? "₦" + (Number(service.pricing.sellMinor) / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })
     : "Pricing unavailable";
 
+const categoryIcon = (category?: string) => {
+  const value = categoryKey(category);
+  if (value.includes("website") || value.includes("domain")) return "◈";
+  if (value.includes("mail") || value.includes("email")) return "@";
+  if (value.includes("sms") || value.includes("message")) return "✦";
+  if (value.includes("verify") || value.includes("2fa")) return "✓";
+  if (value.includes("sim") || value.includes("esim")) return "⌁";
+  if (value.includes("call") || value.includes("voice")) return "◉";
+  if (value.includes("receipt")) return "▤";
+  if (value.includes("wallet") || value.includes("fund")) return "₦";
+  return "C";
+};
+
 export default function CatalogBrowser({ initialCategory = "" }: { initialCategory?: string }) {
   const [services, setServices] = useState<Service[]>([]);
   const [query, setQuery] = useState("");
@@ -82,6 +95,21 @@ export default function CatalogBrowser({ initialCategory = "" }: { initialCatego
     });
   }, [services, category, query]);
 
+  const groups = useMemo(() => {
+    const grouped = new Map<string, Service[]>();
+    for (const service of filtered) {
+      const key = categoryKey(service.category) || "digital services";
+      const existing = grouped.get(key) || [];
+      existing.push(service);
+      grouped.set(key, existing);
+    }
+    return Array.from(grouped.entries()).sort((a, b) => {
+      const an = a[1][0]?.category || a[0];
+      const bn = b[1][0]?.category || b[0];
+      return an.localeCompare(bn);
+    });
+  }, [filtered]);
+
   const selectedCategoryLabel =
     categories.find(([key]) => key === categoryKey(category))?.[1] ||
     (category ? label(category) : "");
@@ -89,21 +117,34 @@ export default function CatalogBrowser({ initialCategory = "" }: { initialCatego
   return (
     <main className="catalog-page">
       <nav className="catalog-nav">
-        <Link href="/" className="catalog-brand"><span>C</span>CLOUDMART</Link>
-        <div>
-          <Link href="/login">Sign in</Link>
-          <Link href="/dashboard" className="catalog-nav-button">Account →</Link>
+        <Link href="/" className="catalog-brand">
+          <span>C</span>
+          <b>CLOUDMART</b>
+        </Link>
+
+        <div className="catalog-nav-actions">
+          <Link href="/catalog" className="catalog-nav-link">Marketplace</Link>
+          <Link href="/login" className="catalog-nav-link">Sign in</Link>
+          <Link href="/dashboard" className="catalog-nav-button">Account <span>→</span></Link>
         </div>
       </nav>
 
       <header className="catalog-hero">
-        <span className="section-kicker">LIVE TUDOWEBS CATALOG</span>
-        <h1>Real products.<br /><em>Live pricing.</em></h1>
-        <p>
-          Every product shown here is loaded from the connected Tudowebs catalog.
-          CloudMart does not use placeholder products or hardcoded catalog entries.
-        </p>
-        <div className="catalog-live-badge"><i /> Tudowebs connected · {services.length || "—"} live products</div>
+        <div className="catalog-hero-copy">
+          <span className="catalog-kicker"><i /> LIVE MARKETPLACE</span>
+          <h1>Digital services<br /><em>that work.</em></h1>
+          <p>
+            Browse the live Tudowebs catalog and buy directly through CloudMart.
+            Products, required details and pricing are loaded from the connected provider.
+          </p>
+        </div>
+
+        <div className="catalog-hero-card">
+          <div><span>LIVE CATALOG</span><b>{services.length || "—"}</b></div>
+          <small>real provider products</small>
+          <div className="catalog-hero-line" />
+          <div className="catalog-provider"><i /> Tudowebs connected</div>
+        </div>
       </header>
 
       <section className="catalog-controls">
@@ -112,7 +153,7 @@ export default function CatalogBrowser({ initialCategory = "" }: { initialCatego
           <input
             value={query}
             onChange={event => setQuery(event.target.value)}
-            placeholder="Search real products..."
+            placeholder="Search products..."
             aria-label="Search live products"
           />
         </div>
@@ -122,7 +163,11 @@ export default function CatalogBrowser({ initialCategory = "" }: { initialCatego
             All <small>{services.length}</small>
           </button>
           {categories.map(([key, name]) => (
-            <button key={key} className={categoryKey(category) === key ? "selected" : ""} onClick={() => setCategory(name)}>
+            <button
+              key={key}
+              className={categoryKey(category) === key ? "selected" : ""}
+              onClick={() => setCategory(name)}
+            >
               {label(name)} <small>{categoryCounts[key] || 0}</small>
             </button>
           ))}
@@ -143,54 +188,63 @@ export default function CatalogBrowser({ initialCategory = "" }: { initialCatego
       ) : (
         <>
           <div className="catalog-meta">
-            <strong>{filtered.length}</strong> live product{filtered.length === 1 ? "" : "s"}
-            {selectedCategoryLabel && <> in <b>{selectedCategoryLabel}</b></>}
+            <span><strong>{filtered.length}</strong> live products</span>
+            {selectedCategoryLabel && <span>· {selectedCategoryLabel}</span>}
           </div>
 
-          {filtered.length ? (
-            <div className="catalog-grid">
-              {filtered.map((service, index) => (
-                <article className="catalog-card" key={service.slug}>
-                  <div className="catalog-card-top">
-                    <span className="catalog-icon">{service.name.slice(0, 1).toUpperCase() || String(index + 1)}</span>
-                    <span className="catalog-category">{label(service.category || "Digital")}</span>
-                  </div>
+          {groups.length ? groups.map(([key, items]) => (
+            <section className="catalog-section" key={key}>
+              <div className="catalog-section-heading">
+                <div>
+                  <h2>{label(items[0]?.category || key)} <span>TOOLS</span></h2>
+                  <p>{items.length} live {items.length === 1 ? "product" : "products"} available</p>
+                </div>
+                <span className="catalog-section-count">{items.length}</span>
+              </div>
 
-                  <div className="catalog-product-source">
-                    <span className="catalog-live-dot" /> LIVE PRODUCT · TUDOWEBS
-                  </div>
-
-                  <h2>{service.name}</h2>
-
-                  <p>
-                    {service.description ||
-                      (service.requiredFields?.length
-                        ? String(service.requiredFields.length) + " detail" +
-                          (service.requiredFields.length === 1 ? "" : "s") +
-                          " required at checkout."
-                        : "Available for secure checkout.")}
-                  </p>
-
-                  {service.requiredFields?.length ? (
-                    <div className="catalog-fields">
-                      {service.requiredFields.slice(0, 3).map(field => <span key={field}>{label(field)}</span>)}
-                      {service.requiredFields.length > 3 && <span>+{service.requiredFields.length - 3}</span>}
+              <div className="catalog-grid">
+                {items.map(service => (
+                  <article className="catalog-card" key={service.slug}>
+                    <div className="catalog-card-top">
+                      <div className="catalog-icon">{categoryIcon(service.category)}</div>
+                      <span className="catalog-live-chip"><i /> LIVE</span>
                     </div>
-                  ) : null}
 
-                  <div className="catalog-card-bottom">
-                    <div>
-                      <small>CloudMart selling price</small>
-                      <strong>{price(service)}</strong>
+                    <h3>{service.name}</h3>
+
+                    <p>
+                      {service.description ||
+                        (service.requiredFields?.length
+                          ? service.requiredFields.length + " checkout detail" +
+                            (service.requiredFields.length === 1 ? "" : "s") + " required."
+                          : "Available for secure checkout.")}
+                    </p>
+
+                    {service.requiredFields?.length ? (
+                      <div className="catalog-fields">
+                        {service.requiredFields.slice(0, 3).map(field => (
+                          <span key={field}>{label(field)}</span>
+                        ))}
+                        {service.requiredFields.length > 3 && (
+                          <span>+{service.requiredFields.length - 3}</span>
+                        )}
+                      </div>
+                    ) : null}
+
+                    <div className="catalog-card-bottom">
+                      <div>
+                        <small>SELLING PRICE</small>
+                        <strong>{price(service)}</strong>
+                      </div>
+                      <Link href={("/services/" + encodeURIComponent(service.slug)) as Route}>
+                        Buy <span>→</span>
+                      </Link>
                     </div>
-                    <Link href={("/services/" + encodeURIComponent(service.slug)) as Route}>
-                      Buy product <span>→</span>
-                    </Link>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
+                  </article>
+                ))}
+              </div>
+            </section>
+          )) : (
             <div className="catalog-state">
               <strong>No live products found.</strong>
               <p>Try another search or select All.</p>
@@ -199,6 +253,11 @@ export default function CatalogBrowser({ initialCategory = "" }: { initialCatego
           )}
         </>
       )}
+
+      <footer className="catalog-footer">
+        <span>© CloudMart · Live digital marketplace</span>
+        <span>Tudowebs provider connected</span>
+      </footer>
     </main>
   );
 }
