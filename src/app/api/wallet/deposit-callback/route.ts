@@ -33,11 +33,13 @@ export async function GET(request: Request) {
     await db.$transaction(async (txdb) => {
       const current = await txdb.walletDeposit.findUnique({ where: { id: deposit.id } });
       if (!current || current.status === "CREDITED") return;
+
       await txdb.wallet.upsert({
         where: { userId: current.userId },
         update: { balanceMinor: { increment: current.amountMinor }, currency: current.currency },
         create: { userId: current.userId, balanceMinor: current.amountMinor, currency: current.currency },
       });
+
       await txdb.ledgerEntry.create({
         data: {
           userId: current.userId,
@@ -47,16 +49,20 @@ export async function GET(request: Request) {
           reference: `PAYSTACK_${current.reference}`,
           description: "Wallet funding via Paystack",
         },
-      }).catch(async (e: any) => {
-        if (e?.code !== "P2002") throw e;
       });
+
       await txdb.walletDeposit.update({
         where: { id: current.id },
         data: { status: "CREDITED", providerReference: String(tx.id) },
       });
     });
+
     return NextResponse.redirect(new URL(`/dashboard?deposit=credited&reference=${encodeURIComponent(reference)}`, request.url));
   } catch {
+    const current = await db.walletDeposit.findUnique({ where: { reference } });
+    if (current?.status === "CREDITED") {
+      return NextResponse.redirect(new URL(`/dashboard?deposit=credited&reference=${encodeURIComponent(reference)}`, request.url));
+    }
     return NextResponse.redirect(new URL(`/dashboard?deposit=verification_error&reference=${encodeURIComponent(reference)}`, request.url));
   }
 }
