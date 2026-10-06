@@ -99,7 +99,10 @@ export async function POST(request: Request) {
   });
 
   if (!order) {
-    await db.webhookEvent.update({ where: { id: event.id }, data: { processedAt: new Date() } });
+    await db.webhookEvent.update({
+      where: { id: event.id },
+      data: { processedAt: new Date(), processingAt: null },
+    });
     return NextResponse.json({ received: true, ignored: "order_not_found" });
   }
 
@@ -110,9 +113,9 @@ export async function POST(request: Request) {
     const terminal = [OrderStatus.COMPLETED, OrderStatus.REFUNDED, OrderStatus.CANCELLED].includes(current.status);
     if (terminal) {
       await tx.webhookEvent.update({
-      where: { id: event.id },
-      data: { processedAt: new Date(), processingAt: null },
-    });
+        where: { id: event.id },
+        data: { processedAt: new Date(), processingAt: null },
+      });
       return;
     }
 
@@ -175,7 +178,10 @@ export async function POST(request: Request) {
       }
     }
 
-    await tx.webhookEvent.update({ where: { id: event.id }, data: { processedAt: new Date() } });
+    await tx.webhookEvent.update({
+      where: { id: event.id },
+      data: { processedAt: new Date(), processingAt: null },
+    });
   });
 
   return NextResponse.json({ received: true });
