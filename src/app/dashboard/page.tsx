@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [deposits, setDeposits] = useState<Deposit[]>([]);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
   const [deposit, setDeposit] = useState("");
   const [message, setMessage] = useState("");
   const [depositStatus, setDepositStatus] = useState("");
@@ -43,7 +44,7 @@ export default function Dashboard() {
   }, [me?.authenticated]);
 
   async function register() {
-    const r = await fetch("/api/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, name }) });
+    const r = await fetch("/api/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, name, password }) });
     if (r.ok) location.reload();
   }
 
@@ -63,7 +64,7 @@ export default function Dashboard() {
 
   return <main className="shell">
     <header className="top"><div><b>CLOUDMART</b><span>Digital services marketplace</span></div>{me?.authenticated && <button onClick={async()=>{await fetch("/api/auth/logout",{method:"POST"});location.reload()}}>Sign out</button>}</header>
-    {!me?.authenticated ? <section className="auth card"><h1>Everything digital, in one place.</h1><p>Connect once. Buy digital services from a unified marketplace.</p><div className="fields"><input placeholder="Name" value={name} onChange={e=>setName(e.target.value)}/><input placeholder="Email address" value={email} onChange={e=>setEmail(e.target.value)}/><button onClick={register}>Create account</button></div></section> :
+    {!me?.authenticated ? <section className="auth card"><h1>Everything digital, in one place.</h1><p>Connect once. Buy digital services from a unified marketplace.</p><div className="fields"><input placeholder="Name" value={name} onChange={e=>setName(e.target.value)}/><input placeholder="Email address" value={email} onChange={e=>setEmail(e.target.value)}/><input type="password" autoComplete="new-password" placeholder="Password (8+ chars, letter + number)" value={password} onChange={e=>setPassword(e.target.value)}/><button onClick={register}>Create account</button></div></section> :
     <>
       <section className="hero"><div><small>Available balance</small><h1>₦{(Number(wallet.balanceMinor)/100).toLocaleString("en-NG",{minimumFractionDigits:2})}</h1><p>{me.user?.name || me.user?.email}</p></div><div className="pill">{wallet.currency}</div></section>
       <section className="card funding"><h2>Fund wallet</h2>{depositStatus && <p className="notice">Payment status: <b>{depositStatus}</b>. Wallet balance updates only after verified payment confirmation.</p>}<p>Create a secure deposit intent. No balance is credited until a payment provider confirms it.</p><div className="inline"><input inputMode="decimal" placeholder="Amount in NGN" value={deposit} onChange={e=>setDeposit(e.target.value)}/><button onClick={createDepositIntent}>Continue</button></div>{message && <p className="notice">{message}</p>}</section>
