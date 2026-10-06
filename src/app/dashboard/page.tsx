@@ -45,7 +45,7 @@ export default function Dashboard() {
     if (!Number.isFinite(minor) || minor < 100) { setMessage("Enter at least ₦1.00."); return; }
     const r = await fetch("/api/wallet/deposit-intents", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ amountMinor: String(minor) }) });
     const body = await r.json();
-    setMessage(r.ok ? `Deposit intent created: ${body.intent.reference}. Payment gateway connection is the next step.` : body.error || "Unable to create deposit intent");
+    if (r.ok && body.payment?.authorization_url) { window.location.href = body.payment.authorization_url; return; }\n    setMessage(r.ok ? `Deposit intent created: ${body.intent.reference}.` : body.error || "Unable to create deposit intent");
   }
 
   if (loading) return <main className="shell"><div className="loading">Loading CloudMart…</div></main>;
