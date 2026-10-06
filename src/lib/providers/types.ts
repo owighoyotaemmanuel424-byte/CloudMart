@@ -21,6 +21,8 @@ export interface ProviderCatalogItem {
   imageUrl?: string;
   providerId?: string;
   basePath?: string;
+  purchasePath?: string;
+  purchaseMethod?: "POST" | "PUT" | "PATCH";
   scopes?: string[];
   actions?: string[];
   methods?: string[];
