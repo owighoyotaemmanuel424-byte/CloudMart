@@ -192,7 +192,7 @@ function firstString(item: Record<string, unknown>, keys: string[]) {
   return undefined;
 }
 
-function firstStringDeep(item: Record<string, unknown>, keys: string[]) {
+function firstStringDeep(item: Record<string, unknown>, keys: string[]): string | undefined {
   const direct = firstString(item, keys);
   if (direct) return direct;
 
@@ -234,7 +234,7 @@ function stringArray(value: unknown): string[] | undefined {
   return result.length ? result : undefined;
 }
 
-function stringArrayDeep(item: Record<string, unknown>, keys: string[]) {
+function stringArrayDeep(item: Record<string, unknown>, keys: string[]): string[] | undefined {
   for (const key of keys) {
     const value = item[key];
     const parsed = stringArray(value);
