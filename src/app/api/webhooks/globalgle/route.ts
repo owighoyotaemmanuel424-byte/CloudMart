@@ -111,27 +111,40 @@ export async function POST(request: Request) {
       },
     });
 
-    if (status === OrderStatus.FAILED && current.status !== OrderStatus.REFUNDED && current.status !== OrderStatus.COMPLETED) {
+    if (status === OrderStatus.FAILED && current.status !== OrderStatus.COMPLETED) {
       const reference = `order:${current.id}:refund`;
       const existing = await tx.ledgerEntry.findUnique({ where: { reference } });
+
       if (!existing) {
         const wallet = await tx.wallet.upsert({
           where: { userId: current.userId },
           create: { userId: current.userId, balanceMinor: current.amountMinor },
           update: { balanceMinor: { increment: current.amountMinor } },
         });
-        await tx.ledgerEntry.create({
-          data: {
-            userId: current.userId,
-            walletId: wallet.id,
-            type: LedgerType.CREDIT,
-            amountMinor: current.amountMinor,
-            reference,
-            description: `Refund for failed CloudMart order ${current.id}`,
-            metadata: { orderId: current.id, provider: "globalgle", source: "webhook" },
-          },
-        });
-        await tx.order.update({ where: { id: current.id }, data: { status: OrderStatus.REFUNDED, responseSnapshot: body as Prisma.InputJsonValue } });
+
+        try {
+          await tx.ledgerEntry.create({
+            data: {
+              userId: current.userId,
+              walletId: wallet.id,
+              type: LedgerType.CREDIT,
+              amountMinor: current.amountMinor,
+              reference,
+              description: `Refund for failed CloudMart order ${current.id}`,
+              metadata: { orderId: current.id, provider: "globalgle", source: "webhook" },
+            },
+          });
+        } catch (error) {
+          if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+        }
+      }
+
+      await tx.order.update({
+        where: { id: current.id },
+        data: { status: OrderStatus.REFUNDED, responseSnapshot: body as Prisma.InputJsonValue },
+      });
+
+      if (!existing) {
         await tx.orderEvent.create({
           data: {
             orderId: current.id,
