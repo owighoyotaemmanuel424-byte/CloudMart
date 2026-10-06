@@ -141,6 +141,30 @@ export async function createOrder(input: CreateOrderInput) {
 
     return { orderId: order.id, status: OrderStatus.PROCESSING, provider: body, amountMinor: pricing.sellMinor.toString() };
   } catch (error) {
+    const isAmbiguous =
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "PROVIDER_OUTCOME_AMBIGUOUS";
+
+    if (isAmbiguous) {
+      await db.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type: "provider_outcome_ambiguous",
+          payload: {
+            message: "Provider request outcome could not be confirmed; order remains PROCESSING for reconciliation.",
+          },
+        },
+      });
+
+      return {
+        orderId: order.id,
+        status: OrderStatus.PROCESSING,
+        providerOutcome: "ambiguous",
+        amountMinor: pricing.sellMinor.toString(),
+      };
+    }
+
     await refundWallet({
       userId: input.userId,
       amountMinor: pricing.sellMinor,
