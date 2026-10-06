@@ -81,10 +81,6 @@ export class GlobalgleClient implements ProviderAdapter {
   }
 
   async catalog() {
-    // Tudowebs/Globalgle deployments can expose the same catalog under
-    // different resource names. Try the canonical paths first, then the
-    // common list variants. A successful HTTP response with an empty list
-    // must not prevent trying the next endpoint.
     const paths = [
       "catalog",
       "services",
@@ -133,33 +129,13 @@ function normalizeCatalog(input: unknown): ProviderCatalogItem[] {
     if (!item) continue;
 
     const slug = firstString(item, [
-      "slug",
-      "code",
-      "service",
-      "serviceId",
-      "service_id",
-      "productId",
-      "product_id",
-      "productCode",
-      "product_code",
-      "id",
-      "uid",
+      "slug", "code", "service", "serviceId", "service_id",
+      "productId", "product_id", "productCode", "product_code", "id", "uid",
     ]);
 
     const name = firstString(item, [
-      "name",
-      "title",
-      "productName",
-      "product_name",
-      "serviceName",
-      "service_name",
-      "serviceTitle",
-      "service_title",
-      "label",
-      "description",
-      "slug",
-      "code",
-      "id",
+      "name", "title", "productName", "product_name", "serviceName",
+      "service_name", "serviceTitle", "service_title", "label", "description", "slug", "code", "id",
     ]);
 
     if (!slug || !name || slug === "[object Object]") continue;
@@ -168,19 +144,33 @@ function normalizeCatalog(input: unknown): ProviderCatalogItem[] {
     if (seen.has(key)) continue;
     seen.add(key);
 
+    const metadata = item;
     normalized.push({
       slug,
       name,
-      category: firstString(item, ["category", "type", "group", "categoryName", "category_name"]),
-      basePath: firstString(item, ["basePath", "base_path", "endpoint", "path"]),
+      category: firstStringDeep(item, [
+        "category", "type", "group", "categoryName", "category_name", "productCategory", "product_category",
+      ]),
+      description: firstStringDeep(item, [
+        "description", "summary", "shortDescription", "short_description", "details", "productDescription", "product_description",
+      ]),
+      imageUrl: firstStringDeep(item, [
+        "imageUrl", "image_url", "image", "thumbnail", "thumbnailUrl", "thumbnail_url", "icon",
+      ]),
+      providerId: firstString(item, [
+        "id", "uid", "productId", "product_id", "serviceId", "service_id", "code", "productCode", "product_code",
+      ]),
+      basePath: firstStringDeep(item, [
+        "basePath", "base_path", "endpoint", "path", "url", "route", "apiPath", "api_path",
+      ]),
       scopes: stringArray(item.scopes),
       actions: stringArray(item.actions),
       methods: stringArray(item.methods),
-      requiredFields: stringArray(
-        item.requiredFields ?? item.required_fields ?? item.required ?? item.fields
-      ),
+      requiredFields: stringArrayDeep(item, [
+        "requiredFields", "required_fields", "required", "fields", "inputs", "parameters", "formFields", "form_fields",
+      ]),
       siteTypes: stringArray(item.siteTypes ?? item.site_types),
-      metadata: item,
+      metadata,
     });
   }
 
@@ -202,12 +192,71 @@ function firstString(item: Record<string, unknown>, keys: string[]) {
   return undefined;
 }
 
+function firstStringDeep(item: Record<string, unknown>, keys: string[]) {
+  const direct = firstString(item, keys);
+  if (direct) return direct;
+
+  for (const [key, value] of Object.entries(item)) {
+    if (!value || typeof value !== "object") continue;
+    const child = toRecord(value);
+    if (child) {
+      const found = firstString(child, keys);
+      if (found) return found;
+    }
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        const record = toRecord(entry);
+        if (!record) continue;
+        const found = firstString(record, keys);
+        if (found) return found;
+      }
+    }
+    if (/category|product|service|meta|detail|config|request/i.test(key)) {
+      const nested = toRecord(value);
+      if (nested) {
+        const found = firstStringDeep(nested, keys);
+        if (found) return found;
+      }
+    }
+  }
+  return undefined;
+}
+
 function stringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const result = value
-    .map((entry) => typeof entry === "string" || typeof entry === "number" ? String(entry) : null)
+    .map((entry) => {
+      if (typeof entry === "string" || typeof entry === "number") return String(entry);
+      const record = toRecord(entry);
+      return record ? firstString(record, ["name", "key", "id", "value", "slug"]) : null;
+    })
     .filter((entry): entry is string => Boolean(entry));
   return result.length ? result : undefined;
+}
+
+function stringArrayDeep(item: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = item[key];
+    const parsed = stringArray(value);
+    if (parsed) return parsed;
+  }
+
+  for (const value of Object.values(item)) {
+    const record = toRecord(value);
+    if (record) {
+      const found = stringArrayDeep(record, keys);
+      if (found) return found;
+    }
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        const record = toRecord(entry);
+        if (!record) continue;
+        const found = stringArrayDeep(record, keys);
+        if (found) return found;
+      }
+    }
+  }
+  return undefined;
 }
 
 function findCatalogItems(input: unknown): unknown[] {
@@ -229,15 +278,8 @@ function findCatalogItems(input: unknown): unknown[] {
     visited.add(object);
 
     const priorityKeys = [
-      "services",
-      "products",
-      "catalog",
-      "results",
-      "data",
-      "items",
-      "records",
-      "rows",
-      "list",
+      "services", "products", "catalog", "results", "data",
+      "items", "records", "rows", "list",
     ];
 
     for (const key of priorityKeys) {
@@ -251,7 +293,9 @@ function findCatalogItems(input: unknown): unknown[] {
 
   walk(input, 0);
 
-  const best = candidates.sort((a, b) => b.filter(looksLikeProduct).length - a.filter(looksLikeProduct).length)[0];
+  const best = candidates.sort(
+    (a, b) => b.filter(looksLikeProduct).length - a.filter(looksLikeProduct).length,
+  )[0];
   return best ?? (Array.isArray(input) ? input : []);
 }
 
@@ -260,23 +304,9 @@ function looksLikeProduct(value: unknown): boolean {
   if (!item) return false;
 
   return [
-    "id",
-    "uid",
-    "slug",
-    "code",
-    "service",
-    "serviceId",
-    "service_id",
-    "productId",
-    "product_id",
-    "productCode",
-    "product_code",
-    "name",
-    "title",
-    "productName",
-    "product_name",
-    "serviceName",
-    "service_name",
+    "id", "uid", "slug", "code", "service", "serviceId", "service_id",
+    "productId", "product_id", "productCode", "product_code",
+    "name", "title", "productName", "product_name", "serviceName", "service_name",
   ].some((key) => {
     const value = item[key];
     return typeof value === "string" || typeof value === "number";
