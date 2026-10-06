@@ -17,7 +17,12 @@ export async function createOrder(input: CreateOrderInput) {
   if (requestedKey && requestedKey.length > 120) throw new Error("Invalid idempotency key");
 
   const providerName = "globalgle";
-  const product = await db.providerProduct.findFirst({
+  const provider = getProvider(providerName);
+
+  // Tudowebs is the source of truth for the public catalog. Keep a local
+  // ProviderProduct mirror for orders/audit, but hydrate it from the live
+  // provider when a product is not already present in Prisma.
+  let product = await db.providerProduct.findFirst({
     where: {
       provider: providerName,
       externalSlug: input.serviceSlug,
@@ -27,7 +32,54 @@ export async function createOrder(input: CreateOrderInput) {
     include: { service: true },
   });
 
-  if (!product) throw new Error("Service is unavailable");
+  if (!product) {
+    const live = (await provider.catalog()).find(item => item.slug === input.serviceSlug);
+    if (!live) throw new Error("Service is unavailable");
+
+    const metadata = (live.metadata ?? {}) as Prisma.InputJsonValue;
+    const service = await db.service.upsert({
+      where: { slug: live.slug },
+      create: {
+        slug: live.slug,
+        name: live.name,
+        category: live.category || "Digital",
+        metadata,
+        enabled: true,
+      },
+      update: {
+        name: live.name,
+        category: live.category || "Digital",
+        metadata,
+        enabled: true,
+      },
+    });
+
+    product = await db.providerProduct.upsert({
+      where: {
+        provider_externalSlug: {
+          provider: providerName,
+          externalSlug: live.slug,
+        },
+      },
+      create: {
+        provider: providerName,
+        externalSlug: live.slug,
+        name: live.name,
+        category: live.category,
+        metadata,
+        serviceId: service.id,
+        enabled: true,
+      },
+      update: {
+        name: live.name,
+        category: live.category,
+        metadata,
+        serviceId: service.id,
+        enabled: true,
+      },
+      include: { service: true },
+    });
+  }
 
   const pricing = resolveProductPricing(product.metadata);
   if (!pricing) throw new Error("pricing_unavailable");
@@ -110,7 +162,7 @@ export async function createOrder(input: CreateOrderInput) {
       },
     });
 
-    const response = await getProvider(providerName).request({
+    const response = await provider.request({
       method: "POST",
       path: providerPath,
       body: input.request,
