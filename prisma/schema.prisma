@@ -85,6 +85,7 @@ model Order {
   serviceId      String
   provider       String
   providerOrderId String?
+  idempotencyKey  String? @unique
   status         OrderStatus @default(PENDING)
   amountMinor    BigInt
   currency       String      @default("NGN")
