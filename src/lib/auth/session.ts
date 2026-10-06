@@ -5,7 +5,11 @@ const COOKIE = "cloudmart_session";
 const TTL_SECONDS = 60 * 60 * 24 * 7;
 
 function secret() {
-  return process.env.CLOUDMART_SESSION_SECRET || process.env.GLOBALGLE_WEBHOOK_SECRET || "change-me";
+  const value = process.env.CLOUDMART_SESSION_SECRET;
+  if (!value && process.env.NODE_ENV === "production") {
+    throw new Error("CLOUDMART_SESSION_SECRET is required in production");
+  }
+  return value || process.env.GLOBALGLE_WEBHOOK_SECRET || "development-only-secret";
 }
 
 function sign(value: string) {
