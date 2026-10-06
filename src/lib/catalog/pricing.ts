@@ -4,47 +4,92 @@ type JsonObject = Record<string, unknown>;
 
 function numeric(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) return Number(value);
+  if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value.replace(/,/g, "")))) return Number(value.replace(/,/g, ""));
+  return undefined;
+}
+
+function findNumber(root: JsonObject, keys: string[], depth = 0): { value: number; source: string } | undefined {
+  if (depth > 3) return undefined;
+  for (const key of keys) {
+    const value = numeric(root[key]);
+    if (value !== undefined) return { value, source: key };
+  }
+  for (const [key, value] of Object.entries(root)) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const found = findNumber(value as JsonObject, keys, depth + 1);
+      if (found) return found;
+    }
+  }
   return undefined;
 }
 
 export function resolveProductPricing(metadata: unknown) {
   const root = (metadata && typeof metadata === "object" ? metadata : {}) as JsonObject;
-  const nested = (root.pricing && typeof root.pricing === "object" ? root.pricing : {}) as JsonObject;
-  const candidates = [root, nested];
 
-  for (const source of candidates) {
-    const ngn = numeric(source.priceNgn) ?? numeric(source.amountNgn);
-    if (ngn !== undefined) {
-      return { providerAmount: String(ngn), providerCurrency: "NGN", sellMinor: nairaToMinor(ngn * (1 + pricingConfig.markupPercent / 100)) };
-    }
+  const ngn = findNumber(root, [
+    "priceNgn","amountNgn","price_ngn","amount_ngn","ngnPrice","ngn_price",
+    "sellingPriceNgn","selling_price_ngn","costNgn","cost_ngn"
+  ]);
+  if (ngn) {
+    return {
+      providerAmount: String(ngn.value),
+      providerCurrency: "NGN",
+      sellMinor: nairaToMinor(ngn.value * (1 + pricingConfig.markupPercent / 100))
+    };
+  }
 
-    const usd = numeric(source.priceUsd) ?? numeric(source.amountUsd) ?? numeric(source.usdPrice);
-    if (usd !== undefined) {
+  const usd = findNumber(root, [
+    "priceUsd","amountUsd","usdPrice","usd_price","price_usd","amount_usd",
+    "sellingPriceUsd","selling_price_usd","costUsd","cost_usd"
+  ]);
+  if (usd) {
+    return {
+      providerAmount: String(usd.value),
+      providerCurrency: "USD",
+      sellMinor: nairaToMinor(calculateSellPrice(usd.value))
+    };
+  }
+
+  const generic = findNumber(root, [
+    "price","amount","cost","unitPrice","unit_price","sellingPrice","selling_price",
+    "salePrice","sale_price","providerPrice","provider_price"
+  ]);
+  if (generic) {
+    const currencyCandidate = findString(root, [
+      "currency","priceCurrency","price_currency","currencyCode","currency_code"
+    ]);
+    const currency = currencyCandidate?.toUpperCase() ?? "USD";
+    if (currency === "NGN" || currency === "NIRA") {
       return {
-        providerAmount: String(usd),
-        providerCurrency: "USD",
-        sellMinor: nairaToMinor(calculateSellPrice(usd)),
+        providerAmount: String(generic.value),
+        providerCurrency: "NGN",
+        sellMinor: nairaToMinor(generic.value * (1 + pricingConfig.markupPercent / 100))
       };
     }
-
-    const generic = numeric(source.price) ?? numeric(source.amount);
-    if (generic !== undefined) {
-      const currency = String(source.currency ?? source.priceCurrency ?? "USD").toUpperCase();
-      if (currency === "NGN") {
-        return { providerAmount: String(generic), providerCurrency: "NGN", sellMinor: nairaToMinor(generic * (1 + pricingConfig.markupPercent / 100)) };
-      }
-      if (currency === "USD") {
-        return {
-          providerAmount: String(generic),
-          providerCurrency: "USD",
-          sellMinor: nairaToMinor(calculateSellPrice(generic)),
-        };
-      }
+    if (currency === "USD") {
+      return {
+        providerAmount: String(generic.value),
+        providerCurrency: "USD",
+        sellMinor: nairaToMinor(calculateSellPrice(generic.value))
+      };
     }
   }
 
   return null;
+}
+
+function findString(root: JsonObject, keys: string[], depth = 0): string | undefined {
+  if (depth > 3) return undefined;
+  for (const key of keys) {
+    if (typeof root[key] === "string" && root[key].trim()) return root[key].trim();
+  }
+  for (const value of Object.values(root)) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const found = findString(value as JsonObject, keys, depth + 1);
+      if (found) return found;
+    }
+  }
+  return undefined;
 }
 
 export function markupForProviderCurrency(currency: string) {
