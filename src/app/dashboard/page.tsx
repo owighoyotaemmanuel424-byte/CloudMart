@@ -6,13 +6,13 @@ import { useEffect, useState } from "react";
 type Service = { slug: string; name: string; category?: string };
 type Me = { authenticated: boolean; user?: { name?: string | null; email: string } | null };
 type Wallet = { balanceMinor: string; currency: string };
-type Order = { id: string; status: string; amountMinor: string; service: Service; createdAt: string };
+type Order = { id: string; status: string; amountMinor: string; service: Service; createdAt: string };\ntype Deposit = { id: string; amountMinor: string; currency: string; reference: string; status: string; paymentProvider?: string | null; createdAt: string; };
 
 export default function Dashboard() {
   const [me, setMe] = useState<Me | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [wallet, setWallet] = useState<Wallet>({ balanceMinor: "0", currency: "NGN" });
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);\n  const [deposits, setDeposits] = useState<Deposit[]>([]);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [deposit, setDeposit] = useState("");
@@ -66,7 +66,7 @@ export default function Dashboard() {
       <section className="hero"><div><small>Available balance</small><h1>₦{(Number(wallet.balanceMinor)/100).toLocaleString("en-NG",{minimumFractionDigits:2})}</h1><p>{me.user?.name || me.user?.email}</p></div><div className="pill">{wallet.currency}</div></section>
       <section className="card funding"><h2>Fund wallet</h2>{depositStatus && <p className="notice">Payment status: <b>{depositStatus}</b>. Wallet balance updates only after verified payment confirmation.</p>}<p>Create a secure deposit intent. No balance is credited until a payment provider confirms it.</p><div className="inline"><input inputMode="decimal" placeholder="Amount in NGN" value={deposit} onChange={e=>setDeposit(e.target.value)}/><button onClick={createDepositIntent}>Continue</button></div>{message && <p className="notice">{message}</p>}</section>
       <h2>Marketplace</h2><div className="grid">{services.map(s=><article className="card" key={s.slug}><span className="tag">{s.category || "Digital"}</span><h3>{s.name}</h3><p>Live service catalog through Globalgle.</p><Link className="button" href={`/services/${encodeURIComponent(s.slug)}`}>View service</Link></article>)}</div>
-      <h2>Recent orders</h2><div className="orders">{orders.length ? orders.map(o=><Link className="order" href={`/orders/${o.id}`} key={o.id}><div><b>{o.service.name}</b><small>{new Date(o.createdAt).toLocaleString()}</small></div><strong>{o.status}</strong></Link>) : <div className="card">No orders yet.</div>}</div>
+      <h2>Wallet deposits</h2><div className="orders">{deposits.length ? deposits.map(d=><div className="order" key={d.id}><div><b>₦{(Number(d.amountMinor)/100).toLocaleString("en-NG",{minimumFractionDigits:2})} deposit</b><small>{d.reference} · {new Date(d.createdAt).toLocaleString()}</small></div><strong className={`status ${d.status.toLowerCase()}`}>{d.status}</strong></div>) : <div className="card">No wallet deposits yet.</div>}</div>\n      <h2>Recent orders</h2><div className="orders">{orders.length ? orders.map(o=><Link className="order" href={`/orders/${o.id}`} key={o.id}><div><b>{o.service.name}</b><small>{new Date(o.createdAt).toLocaleString()}</small></div><strong>{o.status}</strong></Link>) : <div className="card">No orders yet.</div>}</div>
     </>}
   </main>;
 }
