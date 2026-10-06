@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getProvider } from "@/lib/providers";
-import { resolveProductPricing } from "@/lib/catalog/pricing";
+import { getLiveCatalogServices } from "@/lib/catalog/live-services";
 
 export async function GET() {
   if (!process.env.GLOBALGLE_API_KEY) {
@@ -8,18 +7,7 @@ export async function GET() {
   }
 
   try {
-    const catalog = await getProvider("globalgle").catalog();
-    const services = catalog.map(item => {
-      const pricing = resolveProductPricing(item.metadata);
-      return {
-        ...item,
-        pricing: pricing ? {
-          providerAmount: pricing.providerAmount,
-          providerCurrency: pricing.providerCurrency,
-          sellMinor: pricing.sellMinor.toString(),
-        } : null,
-      };
-    });
+    const services = await getLiveCatalogServices();
 
     return NextResponse.json({
       ok: true,
