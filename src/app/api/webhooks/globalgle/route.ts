@@ -76,6 +76,23 @@ export async function POST(request: Request) {
 
   if (event.processedAt) return NextResponse.json({ received: true, duplicate: true });
 
+  // Claim this webhook before creating any order events. A short claim lease
+  // prevents concurrent deliveries from both processing the same event, while
+  // allowing recovery if a server instance crashes mid-processing.
+  const claimCutoff = new Date(Date.now() - 5 * 60 * 1000);
+  const claim = await db.webhookEvent.updateMany({
+    where: {
+      id: event.id,
+      processedAt: null,
+      OR: [{ processingAt: null }, { processingAt: { lt: claimCutoff } }],
+    },
+    data: { processingAt: new Date() },
+  });
+
+  if (claim.count !== 1) {
+    return NextResponse.json({ received: true, duplicate: true });
+  }
+
   const order = await db.order.findFirst({
     where: { provider: "globalgle", providerOrderId },
     select: { id: true, userId: true, amountMinor: true, status: true },
@@ -92,7 +109,10 @@ export async function POST(request: Request) {
 
     const terminal = [OrderStatus.COMPLETED, OrderStatus.REFUNDED, OrderStatus.CANCELLED].includes(current.status);
     if (terminal) {
-      await tx.webhookEvent.update({ where: { id: event.id }, data: { processedAt: new Date() } });
+      await tx.webhookEvent.update({
+      where: { id: event.id },
+      data: { processedAt: new Date(), processingAt: null },
+    });
       return;
     }
 
