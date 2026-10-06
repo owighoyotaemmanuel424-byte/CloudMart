@@ -81,7 +81,7 @@ export async function GET(req:Request){
   try{await db.$queryRaw`SELECT 1`;database={ok:true,message:"PostgreSQL reachable"}}catch{}
   let globalgle={ok:false,status:0,message:"not_configured"};
   if(process.env.GLOBALGLE_API_KEY){
-    try{const {getProvider}=await import("@/lib/providers");globalgle=await getProvider("globalgle").health()}catch(error){globalgle={ok:false,status:500,message:error instanceof Error?error.message:"provider error"}}
+    try{const {getProvider}=await import("@/lib/providers");const health=await getProvider("globalgle").health();globalgle={ok:health.ok,status:health.status,message:health.ok?"healthy":health.message||"provider error"}}catch(error){globalgle={ok:false,status:500,message:error instanceof Error?error.message:"provider error"}}
   }
   return NextResponse.json({ok:true,section:s,timestamp:new Date().toISOString(),database,globalgle,page:1,take:1,total:1,rows:[]});
  }
