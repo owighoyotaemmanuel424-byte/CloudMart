@@ -24,7 +24,7 @@ function extractString(payload: Record<string, unknown>, keys: string[]): string
 
 function canApplyProviderStatus(current: OrderStatus, incoming: OrderStatus) {
   if (current === OrderStatus.PENDING || current === OrderStatus.PROCESSING) {
-    return [OrderStatus.PROCESSING, OrderStatus.COMPLETED, OrderStatus.FAILED, OrderStatus.CANCELLED].includes(incoming);
+    const allowedStatuses: OrderStatus[] = [\n      OrderStatus.PROCESSING,\n      OrderStatus.COMPLETED,\n      OrderStatus.FAILED,\n      OrderStatus.CANCELLED,\n    ];\n    return allowedStatuses.includes(incoming);
   }
   return false;
 }
