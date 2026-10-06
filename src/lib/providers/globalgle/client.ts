@@ -331,15 +331,15 @@ function selectPurchaseAction(value: unknown): {
 
       const normalizedPath = path.toLowerCase();
       const required = stringArray(action.required) ?? [];
-      let score = method === "POST" ? 10 : 6;
+      let score = method === "POST" ? 6 : 4;
 
-      if (required.length) score += 8;
-      if (/create|register|order|provision/.test(summary)) score += 16;
-      else if (/send|rent|generate|add|buy|verify/.test(summary)) score += 11;
-      else if (/update|edit|change/.test(summary)) score += 5;
+      if (required.length) score += 4;
+      if (/create|register|order|provision/.test(summary)) score += 25;
+      else if (/send|rent|generate|add|buy|verify/.test(summary)) score += 18;
+      else if (/update|edit|change/.test(summary)) score += 8;
 
-      if (/\/quote|\/search|\/pricing|\/config|\/providers|\/countries|\/languages|\/voices\b|blocked-countries/.test(normalizedPath)) score -= 30;
-      if (/\/reissue\b|\/storage\b|\/renew\b/.test(normalizedPath)) score -= 14;
+      if (/check|availability|search|quote|pricing|config|providers|countries|languages|cities|blocked-countries|imei-checks/.test(normalizedPath)) score -= 18;
+      if (/\/reissue\b|\/storage\b|\/renew\b/.test(normalizedPath)) score -= 20;
       if (/\/{id}\//.test(normalizedPath)) score -= 8;
 
       return {
