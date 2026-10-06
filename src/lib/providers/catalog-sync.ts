@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getProvider } from "@/lib/providers";
 
@@ -13,7 +14,7 @@ export async function syncProviderCatalog(providerName = "globalgle") {
         slug: item.slug,
         name: item.name,
         category: item.category || "Other",
-        metadata: (item.metadata ?? {}) as object,
+        metadata: (item.metadata ?? {}) as Prisma.InputJsonValue,
       },
       update: {
         name: item.name,
@@ -35,7 +36,7 @@ export async function syncProviderCatalog(providerName = "globalgle") {
         name: item.name,
         category: item.category,
         serviceId: service.id,
-        metadata: item as object,
+        metadata: item as unknown as Prisma.InputJsonValue,
       },
       update: {
         name: item.name,
