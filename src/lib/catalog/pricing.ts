@@ -10,9 +10,13 @@ function numeric(value: unknown) {
     .trim()
     .replace(/[₦$€£]/g, "")
     .replace(/,/g, "")
+    .replace(/^\s*(ngn|nigeria naira|usd|us dollar|n|dollar)\s*[:=\-]?\s*/i, "")
     .replace(/\s*(ngn|nigeria naira|usd|us dollar)\s*$/i, "");
 
   if (cleaned !== "" && Number.isFinite(Number(cleaned))) return Number(cleaned);
+
+  const extracted = cleaned.match(/-?\d+(?:\.\d+)?/);
+  if (extracted && Number.isFinite(Number(extracted[0]))) return Number(extracted[0]);
   return undefined;
 }
 
@@ -25,9 +29,18 @@ function findNumber(root: JsonObject, keys: string[], depth = 0): { value: numbe
   }
 
   for (const [key, value] of Object.entries(root)) {
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      const found = findNumber(value as JsonObject, keys, depth + 1);
-      if (found) return found;
+    if (value && typeof value === "object") {
+      if (Array.isArray(value)) {
+        for (const entry of value) {
+          if (entry && typeof entry === "object") {
+            const found = findNumber(entry as JsonObject, keys, depth + 1);
+            if (found) return found;
+          }
+        }
+      } else {
+        const found = findNumber(value as JsonObject, keys, depth + 1);
+        if (found) return found;
+      }
     }
   }
 
@@ -55,7 +68,15 @@ function findCurrency(root: JsonObject, depth = 0): string | undefined {
   }
 
   for (const value of Object.values(root)) {
-    if (value && typeof value === "object" && !Array.isArray(value)) {
+    if (!value || typeof value !== "object") continue;
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        if (entry && typeof entry === "object") {
+          const found = findCurrency(entry as JsonObject, depth + 1);
+          if (found) return found;
+        }
+      }
+    } else {
       const found = findCurrency(value as JsonObject, depth + 1);
       if (found) return found;
     }
@@ -105,7 +126,15 @@ function findLikelyPrice(root: JsonObject, depth = 0): { value: number; source: 
   }
 
   for (const value of Object.values(root)) {
-    if (value && typeof value === "object" && !Array.isArray(value)) {
+    if (!value || typeof value !== "object") continue;
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        if (entry && typeof entry === "object") {
+          const found = findLikelyPrice(entry as JsonObject, depth + 1);
+          if (found) return found;
+        }
+      }
+    } else {
       const found = findLikelyPrice(value as JsonObject, depth + 1);
       if (found) return found;
     }
@@ -127,6 +156,15 @@ function priceFromCurrencyMap(root: JsonObject): { value: number; currency: stri
 
   for (const candidate of candidates) {
     if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) continue;
+
+    if (Array.isArray(candidate)) {
+      for (const entry of candidate) {
+        if (!entry || typeof entry !== "object") continue;
+        const found = priceFromCurrencyMap(entry as JsonObject);
+        if (found) return found;
+      }
+      continue;
+    }
 
     const map = candidate as JsonObject;
     for (const [key, value] of Object.entries(map)) {
@@ -182,7 +220,7 @@ function inferCurrencyFromPriceSource(source: string) {
 function buildPricing(value: number, currency: string) {
   const normalizedCurrency = currency.toUpperCase();
 
-  if (normalizedCurrency === "NGN" || normalizedCurrency === "NIRA") {
+  if (normalizedCurrency === "NGN" || normalizedCurrency === "NIRA" || normalizedCurrency === "₦") {
     return {
       providerAmount: String(value),
       providerCurrency: "NGN",
@@ -190,7 +228,7 @@ function buildPricing(value: number, currency: string) {
     };
   }
 
-  if (normalizedCurrency === "USD" || normalizedCurrency === "US DOLLAR" || normalizedCurrency === "$") {
+  if (normalizedCurrency === "USD" || normalizedCurrency === "US DOLLAR" || normalizedCurrency === "$" || normalizedCurrency === "US$") {
     return {
       providerAmount: String(value),
       providerCurrency: "USD",
