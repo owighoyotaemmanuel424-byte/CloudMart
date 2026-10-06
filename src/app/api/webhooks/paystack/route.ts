@@ -34,10 +34,11 @@ export async function POST(request: Request) {
       if (!existingLedger) {
         const wallet = await tx.wallet.upsert({
           where: { userId: deposit.userId },
-          create: { userId: deposit.userId, balanceMinor: deposit.amountMinor },
-          update: { balanceMinor: { increment: deposit.amountMinor } },
+          create: { userId: deposit.userId, balanceMinor: 0n, currency: deposit.currency },
+          update: {},
         });
 
+        let createdLedger = false;
         try {
           await tx.ledgerEntry.create({
             data: {
@@ -51,8 +52,16 @@ export async function POST(request: Request) {
               metadata: { depositId: deposit.id, providerReference: reference },
             },
           });
+          createdLedger = true;
         } catch (error) {
           if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+        }
+
+        if (createdLedger) {
+          await tx.wallet.update({
+            where: { id: wallet.id },
+            data: { balanceMinor: { increment: deposit.amountMinor } },
+          });
         }
       }
 
