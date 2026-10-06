@@ -4,8 +4,10 @@ import Link from "next/link";
 import type { Route } from "next";
 import "./catalog.css";
 import { useEffect, useMemo, useState } from "react";
+import type { LiveCatalogService } from "@/lib/catalog/live-services";
 
-type Service = {
+type Service = LiveCatalogService;
+/*
   slug: string;
   name: string;
   category?: string;
@@ -14,6 +16,7 @@ type Service = {
   requiredFields?: string[];
   pricing: { providerAmount: string; providerCurrency: string; sellMinor: string } | null;
 };
+*/
 
 const label = (value: string) =>
   value.replace(/[-_]+/g, " ").replace(/\b\w/g, character => character.toUpperCase());
@@ -39,11 +42,11 @@ const categoryIcon = (category?: string) => {
   return "C";
 };
 
-export default function CatalogBrowser({ initialCategory = "" }: { initialCategory?: string }) {
-  const [services, setServices] = useState<Service[]>([]);
+export default function CatalogBrowser({ initialCategory = "", initialServices = [] }: { initialCategory?: string; initialServices?: Service[] }) {
+  const [services, setServices] = useState<Service[]>(initialServices);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState(initialCategory);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialServices.length === 0);
   const [error, setError] = useState("");
 
   useEffect(() => {
