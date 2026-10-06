@@ -27,7 +27,7 @@ export async function POST(request: Request) {
         email: user.email,
         amountMinor,
         reference,
-        callbackUrl: process.env.CLOUDMART_PAYMENT_CALLBACK_URL,
+        callbackUrl: process.env.CLOUDMART_PAYMENT_CALLBACK_URL || new URL("/api/wallet/deposit-callback", request.url).toString(),
         metadata: { depositId: intent.id, userId: user.id },
       });
       return NextResponse.json({ ok: true, intent: { ...intent, amountMinor: intent.amountMinor.toString() }, payment: payment.data });
