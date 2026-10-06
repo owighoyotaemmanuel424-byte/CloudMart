@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+  RESELLER
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum LedgerType {
+  CREDIT
+  DEBIT
+  REFUND
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  name         String?
+  role         UserRole      @default(CUSTOMER)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  wallet       Wallet?
+  orders       Order[]
+  ledger       LedgerEntry[]
+}
+
+model Wallet {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  currency     String   @default("NGN")
+  balanceMinor BigInt   @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ledger       LedgerEntry[]
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  category    String
+  enabled     Boolean  @default(true)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  products    ProviderProduct[]
+  orders      Order[]
+}
+
+model ProviderProduct {
+  id           String   @id @default(cuid())
+  provider     String
+  externalSlug String
+  name         String
+  category     String?
+  enabled      Boolean  @default(true)
+  metadata     Json?
+  serviceId    String
+  service      Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  @@unique([provider, externalSlug])
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  userId         String
+  serviceId      String
+  provider       String
+  providerOrderId String?
+  status         OrderStatus @default(PENDING)
+  amountMinor    BigInt
+  currency       String      @default("NGN")
+  providerAmount String?
+  markupPercent  Decimal?    @db.Decimal(10,4)
+  requestSnapshot Json?
+  responseSnapshot Json?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  user           User        @relation(fields: [userId], references: [id])
+  service        Service     @relation(fields: [serviceId], references: [id])
+  events         OrderEvent[]
+  @@index([userId, createdAt])
+  @@index([provider, providerOrderId])
+}
+
+model OrderEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  type      String
+  payload   Json
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model LedgerEntry {
+  id          String     @id @default(cuid())
+  userId      String
+  walletId    String
+  type        LedgerType
+  amountMinor BigInt
+  currency    String     @default("NGN")
+  reference   String     @unique
+  description String
+  metadata    Json?
+  createdAt   DateTime   @default(now())
+  user        User       @relation(fields: [userId], references: [id])
+  wallet      Wallet     @relation(fields: [walletId], references: [id])
+  @@index([walletId, createdAt])
+}
+
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  provider    String
+  externalId  String
+  eventType   String
+  payload     Json
+  processedAt DateTime?
+  createdAt   DateTime @default(now())
+  @@unique([provider, externalId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  resource  String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  @@index([resource, createdAt])
+}
