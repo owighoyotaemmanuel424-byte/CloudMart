@@ -37,5 +37,5 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       updatedAt: order.updatedAt,
       events: order.events.map(event => ({ ...event, createdAt: event.createdAt })),
     },
-  });
+  }, { headers: { "cache-control": "private, no-store" } });
 }

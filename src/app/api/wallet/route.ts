@@ -8,5 +8,5 @@ export async function GET() {
   const user = await getSessionUser(jar.get(COOKIE)?.value);
   if (!user) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   const wallet = await db.wallet.findUnique({ where: { userId: user.id }, select: { currency: true, balanceMinor: true, updatedAt: true } });
-  return NextResponse.json({ ok: true, wallet: wallet ? { ...wallet, balanceMinor: wallet.balanceMinor.toString() } : { currency: "NGN", balanceMinor: "0" } });
+  return NextResponse.json({ ok: true, wallet: wallet ? { ...wallet, balanceMinor: wallet.balanceMinor.toString() } : { currency: "NGN", balanceMinor: "0" } }, { headers: { "cache-control": "private, no-store" } });
 }

@@ -3,13 +3,19 @@ import { db } from "@/lib/db";
 
 const COOKIE = "cloudmart_session";
 const TTL_SECONDS = 60 * 60 * 24 * 7;
+const MIN_SECRET_LENGTH = 32;
 
+// Fail closed: a missing, short, or borrowed secret used to be tolerated, which
+// made session cookies forgeable on any deployment that did not set
+// CLOUDMART_SESSION_SECRET (the key fell back to a constant in this file).
 function secret() {
   const value = process.env.CLOUDMART_SESSION_SECRET;
-  if (!value && process.env.NODE_ENV === "production") {
-    throw new Error("CLOUDMART_SESSION_SECRET is required in production");
+  if (!value || value.length < MIN_SECRET_LENGTH) {
+    throw new Error(
+      `CLOUDMART_SESSION_SECRET must be set to a random string of at least ${MIN_SECRET_LENGTH} characters`,
+    );
   }
-  return value || process.env.GLOBALGLE_WEBHOOK_SECRET || "development-only-secret";
+  return value;
 }
 
 function sign(value: string) {
@@ -60,11 +66,24 @@ export function verifyPassword(password: string, encoded: string | null | undefi
   const expected = Buffer.from(hashRaw, "base64url");
   if (!salt.length || !expected.length) return false;
 
+  const cost = Number(nRaw);
+  const blockSize = Number(rRaw);
+  const parallelization = Number(pRaw);
+  // Bounds the work a stored hash can demand so a malformed or hostile row
+  // cannot turn a login attempt into unbounded CPU/memory use.
+  if (
+    !Number.isInteger(cost) || cost < 1024 || cost > 1 << 20 ||
+    !Number.isInteger(blockSize) || blockSize < 1 || blockSize > 32 ||
+    !Number.isInteger(parallelization) || parallelization < 1 || parallelization > 16
+  ) {
+    return false;
+  }
+
   const actual = crypto.scryptSync(password, salt, expected.length, {
-    N: Number(nRaw),
-    r: Number(rRaw),
-    p: Number(pRaw),
-    maxmem: 32 * 1024 * 1024,
+    N: cost,
+    r: blockSize,
+    p: parallelization,
+    maxmem: 64 * 1024 * 1024,
   });
 
   return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);

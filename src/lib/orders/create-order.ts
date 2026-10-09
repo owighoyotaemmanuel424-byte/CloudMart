@@ -218,7 +218,30 @@ export async function createOrder(input: CreateOrderInput) {
       description: `CloudMart order ${order.id}`,
       metadata: { orderId: order.id, service: serviceSlug } as Prisma.InputJsonValue,
     });
+  } catch (error) {
+    // The customer was never charged, so the refund path below must not run:
+    // refunding an unsettled debit credits the wallet with money that was never
+    // taken (a failed checkout used to mint the full order amount).
+    await db.order.update({
+      where: { id: order.id },
+      data: { status: OrderStatus.FAILED },
+    });
 
+    await db.orderEvent.create({
+      data: {
+        orderId: order.id,
+        type: "wallet_debit_failed",
+        payload: {
+          amountMinor: pricing.sellMinor.toString(),
+          error: error instanceof Error ? error.message : "Wallet debit failed",
+        },
+      },
+    });
+
+    throw error;
+  }
+
+  try {
     await db.order.update({
       where: { id: order.id },
       data: { status: OrderStatus.PROCESSING },

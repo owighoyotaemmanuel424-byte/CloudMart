@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { createSession, COOKIE, TTL_SECONDS, hashPassword } from "@/lib/auth/session";
+import { createSession, COOKIE, hashPassword, TTL_SECONDS } from "@/lib/auth/session";
+import { clientIp, rateLimitAll, RATE_LIMIT_WINDOWS, tooManyRequests } from "@/lib/security/rate-limit";
 
 const schema = z.object({
   email: z.string().email(),
@@ -14,8 +15,23 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
+  const ip = clientIp(request);
+  const limited = rateLimitAll([
+    { key: "register:global", limit: 200, windowMs: RATE_LIMIT_WINDOWS.hour },
+    { key: `register:ip:${ip}`, limit: 10, windowMs: RATE_LIMIT_WINDOWS.hour },
+  ]);
+  if (!limited.ok) return tooManyRequests(limited);
+
+  const parsed = schema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json(
+      { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid registration details" },
+      { status: 400 },
+    );
+  }
+
   try {
-    const input = schema.parse(await request.json());
+    const input = parsed.data;
     const email = input.email.toLowerCase();
     const existing = await db.user.findUnique({ where: { email }, select: { id: true } });
     if (existing) {
@@ -49,9 +65,7 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error) {
-    return NextResponse.json({
-      ok: false,
-      error: error instanceof Error ? error.message : "Registration failed",
-    }, { status: 400 });
+    console.error("[cloudmart] registration failed", error);
+    return NextResponse.json({ ok: false, error: "Unable to create this account." }, { status: 500 });
   }
 }

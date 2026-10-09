@@ -4,7 +4,13 @@ import { resolveProductPricing } from "@/lib/catalog/pricing";
 
 export async function GET(_request: Request, context: { params: Promise<{ slug: string }> }) {
   const { slug } = await context.params;
-  const decodedSlug = decodeURIComponent(slug).trim().toLowerCase();
+
+  let decodedSlug: string;
+  try {
+    decodedSlug = decodeURIComponent(slug).trim().toLowerCase();
+  } catch {
+    return NextResponse.json({ ok: false, error: "invalid_slug" }, { status: 400 });
+  }
 
   try {
     const item = (await getProvider("globalgle").catalog()).find(
@@ -17,17 +23,21 @@ export async function GET(_request: Request, context: { params: Promise<{ slug: 
 
     const pricing = resolveProductPricing(item.metadata);
 
+    // Explicit public projection: never spread the raw provider product, which
+    // carries the provider's cost basis and internal metadata.
     return NextResponse.json({
       ok: true,
       provider: "globalgle",
       source: "live",
       service: {
-        ...item,
-        pricing: pricing ? {
-          providerAmount: pricing.providerAmount,
-          providerCurrency: pricing.providerCurrency,
-          sellMinor: pricing.sellMinor.toString(),
-        } : null,
+        slug: item.slug,
+        name: item.name,
+        category: item.category,
+        description: item.description,
+        providerId: item.providerId,
+        requiredFields: item.requiredFields,
+        imageUrl: item.imageUrl,
+        pricing: pricing ? { sellMinor: pricing.sellMinor.toString(), currency: "NGN" } : null,
       },
     });
   } catch {

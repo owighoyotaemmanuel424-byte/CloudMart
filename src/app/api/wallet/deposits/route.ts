@@ -31,5 +31,5 @@ export async function GET() {
       ...deposit,
       amountMinor: deposit.amountMinor.toString(),
     })),
-  });
+  }, { headers: { "cache-control": "private, no-store" } });
 }

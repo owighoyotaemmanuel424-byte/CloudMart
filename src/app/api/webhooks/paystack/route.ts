@@ -74,6 +74,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ ok: true, duplicate: result.duplicate });
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Webhook processing failed" }, { status: 400 });
+    console.error("[cloudmart] paystack webhook processing failed", error);
+    return NextResponse.json({ ok: false, error: "Webhook processing failed" }, { status: 400 });
   }
 }

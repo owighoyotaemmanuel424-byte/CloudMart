@@ -16,5 +16,5 @@ export async function GET() {
   return NextResponse.json({ ok: true, orders: orders.map(o => ({
     id: o.id, status: o.status, provider: o.provider, providerOrderId: o.providerOrderId,
     amountMinor: o.amountMinor.toString(), currency: o.currency, service: o.service, createdAt: o.createdAt,
-  }))});
+  })), }, { headers: { "cache-control": "private, no-store" } });
 }

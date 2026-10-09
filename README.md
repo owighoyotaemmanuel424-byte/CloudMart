@@ -33,11 +33,28 @@ Run:
 
 ```bash
 npm install
+cp .env.example .env      # then fill in the values
 npx prisma generate
 npx prisma migrate dev --name init
 npm run dev
 ```
 
+Migrations are applied by a dedicated release step, not by `next build`:
+
+```bash
+npx prisma migrate deploy
+```
+
 ## Security
 
-Do not commit .env files or provider keys. Use a restricted Globalgle key and rotate any key that has been exposed.
+- `CLOUDMART_SESSION_SECRET` is required and must be at least 32 random
+  characters. Sessions are HMAC-signed with it; the server fails closed rather
+  than falling back to a default.
+- Admin access needs the server-side `CLOUDMART_ADMIN_ACCESS_KEY` **and** the
+  password of the admin account. The first admin is bootstrapped from
+  `/admin/login`; after that, bootstrap is locked and each admin signs in with
+  their own password.
+- Do not commit .env files or provider keys. Use a restricted Globalgle key and
+  rotate any key that has been exposed.
+- Provider cost basis and raw provider metadata are not exposed by the public
+  catalog endpoints.
